@@ -41,7 +41,7 @@ const loadTree = async () => {
 const resetForm = () => {
   form.id = ''
   form.name = ''
-  form.parentId = '0'
+  form.parentId = 0 // 使用数字 0 代表根节点，匹配后端 Long 类型
   form.sortOrder = 1
 }
 
@@ -49,11 +49,14 @@ const openCreate = (parent) => {
   resetForm()
   if (parent) {
     // 仅允许两级分类
-    if (parent.parentId !== '0') {
+    // 后端 ParentId 为 0 或 null 代表一级，前端数据中 parentId 可能是字符串 "0"
+    if (String(parent.parentId) !== '0') {
       ElMessage.warning('仅支持两级分类，二级分类下不可再新增')
       return
     }
     form.parentId = parent.id
+  } else {
+    form.parentId = 0 // 新增一级分类
   }
   dialogVisible.value = true
 }
@@ -61,7 +64,10 @@ const openCreate = (parent) => {
 const openEdit = (node) => {
   form.id = node.id
   form.name = node.name
-  form.parentId = node.parentId
+  // 后端返回的 id 和 parentId 都是 String (因 JacksonConfig 配置)
+  // 编辑时可以直接使用字符串 ID，但在 Select 选择器中需要注意类型匹配
+  // 这里为了配合下面的 Select 选项，如果是 "0" 则转为数字 0，或者让 Select 兼容字符串
+  form.parentId = node.parentId === '0' ? 0 : node.parentId
   form.sortOrder = node.sortOrder
   dialogVisible.value = true
 }
@@ -72,7 +78,7 @@ const handleSubmit = () => {
     if (!valid) return
     const payload = {
       name: form.name,
-      parentId: form.parentId,
+      parentId: form.parentId === '' ? 0 : form.parentId,
       sortOrder: form.sortOrder,
     }
     try {
@@ -98,7 +104,7 @@ const handleDelete = (node) => {
       ElMessage.success('删除成功')
       loadTree()
     })
-    .catch(() => {})
+    .catch(() => { })
 }
 
 onMounted(() => {

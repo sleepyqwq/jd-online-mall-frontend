@@ -28,18 +28,20 @@ const categoryMap = ref({})
 
 const dialogVisible = ref(false)
 const formRef = ref()
+
 const form = reactive({
   id: '',
   title: '',
   subTitle: '',
   description: '',
-  price: null,
-  stock: null,
+  price: 0,
+  stock: 0,
   categoryId: '',
   mainImage: '',
   imageList: [],
   status: 'ON_SHELF',
 })
+
 const galleryFileList = ref([])
 
 const statusDict = {
@@ -62,7 +64,7 @@ const buildCategoryOptions = (tree = []) => {
       flat[item.id] = item.name
       return {
         label: item.name,
-        value: item.id,
+        value: item.id, // 后端返回的是 String 类型的 ID，这里直接用
         children: item.children?.map((child) => {
           flat[child.id] = child.name
           return { label: child.name, value: child.id }
@@ -85,7 +87,15 @@ const loadCategories = async () => {
 const loadList = async () => {
   loading.value = true
   try {
-    const res = await getAdminProductList(query)
+    // 【关键修正】清理空字符串参数，避免后端 Long 类型报错
+    const params = {
+      pageNum: query.pageNum,
+      pageSize: query.pageSize,
+      title: query.title || undefined,
+      status: query.status || undefined,
+      categoryId: query.categoryId || undefined // 清理空串
+    }
+    const res = await getAdminProductList(params)
     list.value = res.list || []
     total.value = res.total || 0
   } catch (error) {
@@ -100,13 +110,16 @@ const resetForm = () => {
   form.title = ''
   form.subTitle = ''
   form.description = ''
-  form.price = null
-  form.stock = null
+  form.price = 0
+  form.stock = 0
   form.categoryId = ''
   form.mainImage = ''
   form.imageList = []
   form.status = 'ON_SHELF'
   galleryFileList.value = []
+  if (formRef.value) {
+    formRef.value.resetFields()
+  }
 }
 
 const openCreate = () => {
@@ -120,52 +133,74 @@ const openEdit = (row) => {
   form.title = row.title
   form.subTitle = row.subTitle
   form.description = row.description
-  form.price = row.price
-  form.stock = row.stock
+  form.price = Number(row.price)
+  form.stock = Number(row.stock)
   form.categoryId = row.categoryId
   form.mainImage = row.mainImage
-  form.imageList = row.imageList || row.images || []
   form.status = row.status || 'ON_SHELF'
-  galleryFileList.value = (form.imageList || []).map((url, idx) => ({
+
+  // 处理图片列表回显
+  // 后端 List<String> 序列化后就是 JS Array
+  const images = row.imageList || row.images || []
+  form.imageList = [...images]
+
+  // 构造 Upload 组件需要的 fileList
+  galleryFileList.value = form.imageList.map((url, idx) => ({
     name: `image-${idx}`,
-    url,
+    url: url,
   }))
+
   dialogVisible.value = true
 }
 
 const handleMainUpload = async ({ file }) => {
-  const res = await uploadFile(file)
-  form.mainImage = res.fullUrl || res.url
-  ElMessage.success('主图上传成功')
+  try {
+    const res = await uploadFile(file)
+    // 【关键修正】仅保存相对路径 url，配合 Vite 代理显示
+    form.mainImage = res.url
+    ElMessage.success('主图上传成功')
+  } catch (error) {
+    // error
+  }
 }
 
 const handleGalleryUpload = async ({ file }) => {
-  const res = await uploadFile(file)
-  const url = res.fullUrl || res.url
-  form.imageList.push(url)
-  galleryFileList.value = [...form.imageList].map((img, idx) => ({ name: `image-${idx}`, url: img }))
+  try {
+    const res = await uploadFile(file)
+    const url = res.url // 【关键修正】仅保存相对路径
+
+    form.imageList.push(url)
+
+    galleryFileList.value.push({
+      name: file.name,
+      url: url
+    })
+    ElMessage.success('上传成功')
+  } catch (error) {
+    console.error(error)
+  }
 }
 
-const handleGalleryRemove = (file) => {
-  form.imageList = form.imageList.filter((img) => img !== file.url)
-  galleryFileList.value = form.imageList.map((img, idx) => ({ name: `image-${idx}`, url: img }))
+const handleGalleryRemove = (uploadFile) => {
+  const urlToRemove = uploadFile.url
+  form.imageList = form.imageList.filter((img) => img !== urlToRemove)
+  // 同步更新显示列表
+  galleryFileList.value = galleryFileList.value.filter(f => f.url !== urlToRemove)
 }
 
 const handleSubmit = () => {
   if (!formRef.value) return
   formRef.value.validate(async (valid) => {
     if (!valid) return
+
+    // 构造提交参数
     const payload = {
-      title: form.title,
-      subTitle: form.subTitle,
-      description: form.description,
-      price: form.price,
-      stock: form.stock,
-      categoryId: form.categoryId,
-      mainImage: form.mainImage,
-      imageList: form.imageList,
-      status: form.status,
+      ...form,
+      price: Number(form.price), // 确保数字类型
+      stock: Number(form.stock), // 确保数字类型
+      imageList: [...form.imageList] // 确保是数组
     }
+
     try {
       if (form.id) {
         await updateAdminProduct(form.id, payload)
@@ -189,7 +224,7 @@ const handleDelete = (row) => {
       ElMessage.success('删除成功')
       loadList()
     })
-    .catch(() => {})
+    .catch(() => { })
 }
 
 const handleToggleStatus = (row) => {
@@ -201,7 +236,7 @@ const handleToggleStatus = (row) => {
       ElMessage.success(`${tip}成功`)
       loadList()
     })
-    .catch(() => {})
+    .catch(() => { })
 }
 
 const handleSearch = () => {
@@ -265,7 +300,7 @@ onMounted(() => {
       <el-table-column label="主图" width="100" align="center">
         <template #default="{ row }">
           <el-image v-if="row.mainImage" :src="row.mainImage" fit="cover" style="width: 60px; height: 60px"
-            :preview-src-list="[row.mainImage]" hide-on-click-modal />
+            :preview-src-list="[row.mainImage]" hide-on-click-modal preview-teleported />
         </template>
       </el-table-column>
       <el-table-column prop="title" label="商品标题" min-width="180" show-overflow-tooltip />
@@ -297,10 +332,11 @@ onMounted(() => {
 
     <div class="pager" v-if="total > 0">
       <el-pagination background layout="prev, pager, next" :total="total" :page-size="query.pageSize"
-        :current-page="query.pageNum" @current-change="handlePageChange" />
+        v-model:current-page="query.pageNum" @current-change="handlePageChange" />
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑商品' : '新增商品'" width="720px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑商品' : '新增商品'" width="720px" destroy-on-close
+      :close-on-click-modal="false">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="标题" prop="title">
           <el-input v-model="form.title" maxlength="60" show-word-limit />
@@ -309,14 +345,14 @@ onMounted(() => {
           <el-input v-model="form.subTitle" maxlength="120" show-word-limit />
         </el-form-item>
         <el-form-item label="分类" prop="categoryId">
-          <el-cascader v-model="form.categoryId" :options="categoryOptions" :props="{ emitPath: false, checkStrictly: true }"
-            placeholder="请选择分类" style="width: 260px" />
+          <el-cascader v-model="form.categoryId" :options="categoryOptions"
+            :props="{ emitPath: false, checkStrictly: true }" placeholder="请选择分类" style="width: 100%" />
         </el-form-item>
         <el-form-item label="价格(元)" prop="price">
-          <el-input-number v-model="form.price" :min="0" :precision="2" :step="1" />
+          <el-input-number v-model="form.price" :min="0" :precision="2" :step="1" style="width: 180px" />
         </el-form-item>
         <el-form-item label="库存" prop="stock">
-          <el-input-number v-model="form.stock" :min="0" :step="1" />
+          <el-input-number v-model="form.stock" :min="0" :step="1" :precision="0" style="width: 180px" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="form.status" style="width: 180px">
@@ -324,23 +360,27 @@ onMounted(() => {
             <el-option label="下架" value="OFF_SHELF" />
           </el-select>
         </el-form-item>
+
         <el-form-item label="主图" prop="mainImage">
-          <el-upload class="cover-uploader" action="#" :show-file-list="false" :http-request="handleMainUpload">
+          <el-upload class="cover-uploader" action="#" :show-file-list="false" :http-request="handleMainUpload"
+            accept="image/*">
             <img v-if="form.mainImage" :src="form.mainImage" class="cover" />
             <el-icon v-else class="uploader-icon">
               <Plus />
             </el-icon>
           </el-upload>
-          <div class="upload-tip">推荐 800x800，需先通过上传接口拿到 URL</div>
+          <div class="upload-tip">点击上传图片，建议尺寸 800x800</div>
         </el-form-item>
+
         <el-form-item label="轮播图">
-          <el-upload action="#" list-type="picture-card" :file-list="galleryFileList" :http-request="handleGalleryUpload"
-            :on-remove="handleGalleryRemove">
+          <el-upload action="#" list-type="picture-card" :file-list="galleryFileList"
+            :http-request="handleGalleryUpload" :on-remove="handleGalleryRemove" accept="image/*">
             <el-icon>
               <Plus />
             </el-icon>
           </el-upload>
         </el-form-item>
+
         <el-form-item label="详情描述">
           <el-input v-model="form.description" type="textarea" :rows="4" placeholder="支持富文本字符串" />
         </el-form-item>
@@ -397,27 +437,31 @@ onMounted(() => {
 }
 
 .cover-uploader {
-  width: 140px;
+  width: 120px;
+  height: 120px;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cover-uploader:hover {
+  border-color: #409eff;
 }
 
 .cover {
-  width: 120px;
-  height: 120px;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border: 1px solid #eee;
-  border-radius: 6px;
 }
 
 .uploader-icon {
   font-size: 28px;
-  color: #909399;
-  width: 120px;
-  height: 120px;
-  border: 1px dashed #dcdfe6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
+  color: #8c939d;
 }
 
 .upload-tip {

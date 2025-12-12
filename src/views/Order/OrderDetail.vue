@@ -7,6 +7,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const route = useRoute()
 const order = ref({})
 const loading = ref(true)
+const timer = ref(null)
+const nowTime = ref(Date.now()) // 响应式当前时间
 
 const statusMap = {
     'WAIT_PAY': '待支付',
@@ -22,12 +24,38 @@ const loadDetail = async () => {
     try {
         const res = await getOrderDetail(route.params.orderId)
         order.value = res || {}
+        // 如果订单是待支付状态，启动倒计时
+        if (order.value.status === 'WAIT_PAY') {
+            startTimer()
+        } else {
+            stopTimer()
+        }
     } catch (error) {
         console.error(error)
     } finally {
         loading.value = false
     }
 }
+
+const startTimer = () => {
+    stopTimer()
+    timer.value = setInterval(() => {
+        nowTime.value = Date.now()
+        // 如果倒计时结束，清除定时器并刷新页面状态（此时后端可能已取消订单）
+        if (remainingSeconds.value <= 0) {
+            stopTimer()
+            loadDetail()
+        }
+    }, 1000)
+}
+
+const stopTimer = () => {
+    if (timer.value) {
+        clearInterval(timer.value)
+        timer.value = null
+    }
+}
+
 
 // 支付
 const handlePay = async () => {
@@ -52,20 +80,34 @@ const handleCancel = () => {
     }).catch(() => { })
 }
 
-// 计算剩余时间（简单演示，实际建议用 hooks 或 interval）
+// 基于 expireTime 和当前时间计算剩余描述
 const remainingTime = computed(() => {
     if (order.value.status !== 'WAIT_PAY' || !order.value.expireTime) return ''
-    const end = new Date(order.value.expireTime).getTime()
-    const now = new Date().getTime()
-    const diff = end - now
-    if (diff <= 0) return '已超时'
-    const minutes = Math.floor(diff / 1000 / 60)
-    return `${minutes} 分钟`
+
+    // 解析后端时间字符串 'yyyy-MM-dd HH:mm:ss'，需注意浏览器兼容性，最好替换 ' ' 为 'T'
+    const expireDate = new Date(order.value.expireTime.replace(' ', 'T'))
+    const diff = expireDate.getTime() - nowTime.value
+
+    if (diff <= 0) return '00:00'
+
+    const minutes = Math.floor((diff / 1000 / 60) % 60)
+    const seconds = Math.floor((diff / 1000) % 60)
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+})
+
+const remainingSeconds = computed(() => {
+    if (!order.value.expireTime) return 0
+    return new Date(order.value.expireTime.replace(' ', 'T')).getTime() - nowTime.value
 })
 
 onMounted(() => {
     loadDetail()
 })
+
+onUnmounted(() => {
+    stopTimer()
+})
+
 </script>
 
 <template>

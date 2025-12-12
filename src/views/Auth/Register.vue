@@ -50,8 +50,8 @@ const rules = {
 const customRequest = async (options) => {
     try {
         const res = await uploadFile(options.file)
-        // 二、通用文件上传接口 - 响应字段 url/fullUrl
-        // 建议前端存储 url (相对路径) 或 fullUrl 均可，这里存 url
+        // 后端返回 { url: '/images/...', fullUrl: 'http://...' }
+        // 存储 url (相对路径) 以便存入数据库，前端靠代理访问
         form.avatar = res.url
         ElMessage.success('头像上传成功')
     } catch (error) {

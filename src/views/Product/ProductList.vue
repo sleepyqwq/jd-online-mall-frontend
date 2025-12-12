@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getProductList, getCategoryTree } from '@/api/product'
+import { getProductList } from '@/api/product'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,15 +20,21 @@ const queryParams = reactive({
     sortOrder: '' // asc, desc
 })
 
-// 辅助数据：分类名称显示
-const categoryName = ref('')
-const categoryTree = ref([])
-
 // 加载数据
 const loadData = async () => {
     loading.value = true
     try {
-        const res = await getProductList(queryParams)
+        // 【关键修正】构造干净的请求参数，剔除空字符串，防止后端 Long 类型解析失败
+        const params = {
+            pageNum: queryParams.pageNum,
+            pageSize: queryParams.pageSize,
+            keyword: queryParams.keyword || undefined,
+            categoryId: queryParams.categoryId || undefined, // 空串转 undefined
+            sortField: queryParams.sortField || undefined,
+            sortOrder: queryParams.sortOrder || undefined
+        }
+
+        const res = await getProductList(params)
         productList.value = res.list
         total.value = res.total
     } catch (error) {
@@ -49,10 +55,9 @@ watch(
     }
 )
 
-// 排序处理
+// 排序处理优化
 const handleSort = (field) => {
     if (queryParams.sortField === field) {
-        // 切换顺序: asc -> desc -> 取消
         if (queryParams.sortOrder === 'asc') {
             queryParams.sortOrder = 'desc'
         } else {
@@ -61,8 +66,9 @@ const handleSort = (field) => {
         }
     } else {
         queryParams.sortField = field
-        queryParams.sortOrder = 'asc'
+        queryParams.sortOrder = field === 'createTime' ? 'desc' : 'asc'
     }
+    queryParams.pageNum = 1
     loadData()
 }
 
@@ -186,7 +192,6 @@ onMounted(() => {
 
 .product-item {
     width: 228px;
-    /* 适配 1200px 容器，一行5个左右 */
     background: #fff;
     border: 1px solid #eee;
     padding: 10px;

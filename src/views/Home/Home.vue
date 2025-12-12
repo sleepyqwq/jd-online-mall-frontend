@@ -11,13 +11,17 @@ const loading = ref(true)
 // 初始化加载数据
 onMounted(async () => {
     try {
-        // 并行请求分类和商品
-        const [cateRes, prodRes] = await Promise.all([
-            getCategoryTree(),
-            getProductList({ pageNum: 1, pageSize: 8 }) // 获取前8个作为热门展示
-        ])
+        // 1. 获取分类树
+        const cateRes = await getCategoryTree()
         categoryTree.value = cateRes || []
-        hotProducts.value = prodRes.list || []
+
+        // 2. 尝试获取商品 (容错处理：如果后端没写商品接口，不影响分类显示)
+        try {
+            const prodRes = await getProductList({ pageNum: 1, pageSize: 8 })
+            hotProducts.value = prodRes.list || []
+        } catch (e) {
+            console.warn('商品接口暂未实现或报错，跳过加载')
+        }
     } catch (error) {
         console.error('Home data load failed', error)
     } finally {
@@ -49,10 +53,13 @@ const goToDetail = (id) => {
                                 <ArrowRight />
                             </el-icon>
                         </div>
-                        <div class="sub-cat-popover" v-if="cat.children && cat.children.length">
-                            <div v-for="sub in cat.children" :key="sub.id" class="sub-item"
-                                @click.stop="handleCategoryClick(sub.id)">
-                                {{ sub.name }}
+
+                        <div class="sub-cat-popover" v-if="cat.children && cat.children.length > 0">
+                            <div class="popover-content">
+                                <div v-for="sub in cat.children" :key="sub.id" class="sub-item"
+                                    @click.stop="handleCategoryClick(sub.id)">
+                                    {{ sub.name }}
+                                </div>
                             </div>
                         </div>
                     </li>
@@ -60,7 +67,7 @@ const goToDetail = (id) => {
             </div>
 
             <div class="content-area">
-                <el-carousel height="300px" class="banner">
+                <el-carousel height="400px" class="banner">
                     <el-carousel-item v-for="item in 3" :key="item">
                         <div class="banner-placeholder">
                             <h3>活动展示位 {{ item }}</h3>
@@ -73,6 +80,7 @@ const goToDetail = (id) => {
 
         <div class="section-title">热门推荐</div>
         <div class="product-grid" v-loading="loading">
+            <el-empty v-if="hotProducts.length === 0" description="暂无热门商品" />
             <div v-for="prod in hotProducts" :key="prod.id" class="product-card" @click="goToDetail(prod.id)">
                 <div class="img-wrapper">
                     <img :src="prod.mainImage || ''" alt="商品图片" class="prod-img">
@@ -94,70 +102,95 @@ const goToDetail = (id) => {
 
 .main-area {
     display: flex;
-    gap: 15px;
+    gap: 10px;
+    /* 减小间隙，防止鼠标移动时弹层消失 */
     margin-bottom: 30px;
 }
 
-/* 分类侧边栏 */
+/* --- 分类侧边栏核心样式 --- */
 .category-sidebar {
     width: 200px;
     background: #fff;
     border: 1px solid #ddd;
-    height: 400px;
+    height: 440px;
+    /* 稍微调高一点，配合轮播图高度 */
     position: relative;
+    /* 关键：作为绝对定位的父容器 */
+    z-index: 101;
+    box-sizing: border-box;
 }
 
 .cat-title {
     padding: 10px 15px;
-    background: #f8f8f8;
+    background: #e4393c;
+    /* 京东红背景 */
+    color: #fff;
     font-weight: bold;
-    border-bottom: 1px solid #eee;
+    font-size: 16px;
 }
 
 .cat-list {
-    padding: 5px 0;
+    padding: 0;
+    margin: 0;
 }
 
 .cat-item {
-    position: relative;
+    /* 注意：这里去掉了 position: relative */
+    /* 这样子元素的 absolute 就会去寻找最近的 relative 祖先（也就是 category-sidebar） */
+    /* 从而实现二级菜单始终与侧边栏顶部对齐 */
 }
 
 .cat-label {
-    padding: 10px 15px;
+    padding: 0 15px;
+    height: 40px;
+    line-height: 40px;
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
     font-size: 14px;
+    color: #333;
+    transition: background-color 0.2s;
 }
 
-.cat-label:hover {
-    background-color: #f0f0f0;
-    color: var(--el-color-primary);
+/* 鼠标悬停一级分类时的样式 */
+.cat-item:hover .cat-label {
+    background-color: #d9d9d9;
+    color: #e4393c;
+    font-weight: bold;
 }
 
-/* 二级分类弹层 */
+/* --- 二级分类弹层样式 --- */
 .sub-cat-popover {
     display: none;
+    /* 【关键】默认隐藏 */
     position: absolute;
     left: 199px;
+    /* 紧贴侧边栏右侧 (200px宽度 - 1px边框) */
     top: 0;
-    width: 400px;
-    min-height: 400px;
+    width: 600px;
+    /* 弹层宽度 */
+    height: 100%;
+    /* 高度铺满侧边栏 */
     background: #fff;
     border: 1px solid #ddd;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    z-index: 200;
+    /* 确保在轮播图之上 */
     padding: 20px;
-    z-index: 99;
-    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    gap: 15px;
+    box-sizing: border-box;
 }
 
-/* 纯 CSS 实现 Hover 显示 */
+/* 【关键】鼠标悬停在一级项上时，显示其内部的弹层 */
 .cat-item:hover .sub-cat-popover {
+    display: block;
+}
+
+.popover-content {
     display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-content: flex-start;
 }
 
 .sub-item {
@@ -166,20 +199,36 @@ const goToDetail = (id) => {
     color: #666;
     padding: 0 10px;
     border-left: 1px solid #eee;
+    /* 左侧分割线 */
+    line-height: 1.2;
+}
+
+/* 去掉第一个子项的左边框，解决“| 手机”这种丑陋的显示 */
+.sub-item:first-child {
+    border-left: none;
+    padding-left: 0;
 }
 
 .sub-item:hover {
     color: var(--el-color-primary);
+    text-decoration: underline;
 }
 
-/* 轮播图区域 */
+/* --- 右侧轮播图与内容 --- */
 .content-area {
     flex: 1;
+    overflow: hidden;
+    /* 防止溢出 */
+}
+
+.banner {
+    border-radius: 8px;
+    /* 圆角美化 */
 }
 
 .banner-placeholder {
     height: 100%;
-    background-color: #eef2f5;
+    background-color: #f5f5f5;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -187,13 +236,23 @@ const goToDetail = (id) => {
     color: #999;
 }
 
-/* 商品网格 */
+/* --- 商品网格 --- */
 .section-title {
-    font-size: 20px;
+    font-size: 22px;
     font-weight: bold;
-    margin-bottom: 15px;
-    border-left: 4px solid var(--el-color-primary);
-    padding-left: 10px;
+    margin: 20px 0;
+    display: flex;
+    align-items: center;
+}
+
+.section-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 18px;
+    background: #e4393c;
+    margin-right: 10px;
+    border-radius: 2px;
 }
 
 .product-grid {
@@ -207,12 +266,12 @@ const goToDetail = (id) => {
     padding: 15px;
     cursor: pointer;
     transition: all 0.3s;
-    border: 1px solid transparent;
+    border-radius: 8px;
+    border: 1px solid #f0f0f0;
 }
 
 .product-card:hover {
-    border-color: #eee;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
     transform: translateY(-2px);
 }
 
@@ -220,28 +279,30 @@ const goToDetail = (id) => {
     width: 100%;
     height: 200px;
     background: #f9f9f9;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 4px;
     overflow: hidden;
 }
 
 .prod-img {
     max-width: 100%;
     max-height: 100%;
+    object-fit: cover;
 }
 
 .price {
     color: #e4393c;
     font-size: 18px;
     font-weight: bold;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
 }
 
 .title {
     font-size: 14px;
-    color: #666;
+    color: #333;
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
