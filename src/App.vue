@@ -8,7 +8,7 @@ const route = useRoute()
 
 // 简单的判断，登录和注册页不显示 Header 和 Footer
 const showLayout = computed(() => {
-  return !['/login', '/register'].includes(route.path)
+  return !['/login', '/register', '/admin/login'].includes(route.path)
 })
 </script>
 

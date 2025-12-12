@@ -68,7 +68,7 @@ const handleLogout = async () => {
                         <span class="el-dropdown-link user-info">
                             <el-avatar :size="30" :src="userStore.userInfo.avatar || ''" class="avatar-icon" />
                             <span class="username">{{ userStore.userInfo.nickname || userStore.userInfo.username
-                            }}</span>
+                                }}</span>
                             <el-icon class="el-icon--right"><arrow-down /></el-icon>
                         </span>
                         <template #dropdown>

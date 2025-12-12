@@ -20,10 +20,11 @@ const form = reactive({
 // 表单校验规则
 const rules = {
     username: [
-        { required: true, message: '请输入账号', trigger: 'blur' },
-        { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+        // "username 登录账号，必填，需校验唯一" - 移除了长度限制
+        { required: true, message: '请输入账号', trigger: 'blur' }
     ],
     password: [
+        // "password 登录密码，必填" - 保留最少位数限制以保证安全性，虽文档未明说但属常规UI交互
         { required: true, message: '请输入密码', trigger: 'blur' },
         { min: 6, message: '密码长度不能少于 6 位', trigger: 'blur' }
     ],
@@ -41,7 +42,7 @@ const rules = {
         }
     ],
     nickname: [
-        { required: true, message: '请输入昵称', trigger: 'blur' }
+        { required: false, message: '请输入昵称', trigger: 'blur' } // 文档标注为可选
     ]
 }
 
@@ -49,8 +50,9 @@ const rules = {
 const customRequest = async (options) => {
     try {
         const res = await uploadFile(options.file)
-        // 根据接口文档，返回 data 包含 url 字段
-        form.avatar = res.url // 存储相对路径
+        // 二、通用文件上传接口 - 响应字段 url/fullUrl
+        // 建议前端存储 url (相对路径) 或 fullUrl 均可，这里存 url
+        form.avatar = res.url
         ElMessage.success('头像上传成功')
     } catch (error) {
         ElMessage.error('头像上传失败')
@@ -65,6 +67,7 @@ const handleRegister = async () => {
         if (valid) {
             loading.value = true
             try {
+                // 三、1.(1) 用户注册接口
                 await register({
                     username: form.username,
                     password: form.password,
@@ -74,7 +77,7 @@ const handleRegister = async () => {
                 ElMessage.success('注册成功，请登录')
                 router.push('/login')
             } catch (error) {
-                // 错误已在 request.js 中统一处理或打印
+                // 错误已在 request.js 中统一处理
             } finally {
                 loading.value = false
             }
@@ -129,6 +132,7 @@ const handleRegister = async () => {
 </template>
 
 <style scoped>
+/* 样式保持不变 */
 .auth-container {
     height: 100vh;
     display: flex;
@@ -168,7 +172,6 @@ const handleRegister = async () => {
     color: var(--el-color-primary);
 }
 
-/* 头像上传样式 */
 .avatar-uploader .el-upload {
     border: 1px dashed var(--el-border-color);
     border-radius: 6px;
@@ -189,7 +192,6 @@ const handleRegister = async () => {
     height: 100px;
     text-align: center;
     line-height: 100px;
-    /* 使图标垂直居中 */
     border: 1px dashed #d9d9d9;
 }
 

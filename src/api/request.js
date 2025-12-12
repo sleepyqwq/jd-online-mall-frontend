@@ -45,6 +45,16 @@ service.interceptors.response.use(
       return Promise.reject(new Error(res.message))
     }
 
+    if (res.code === 40003) {
+      // 权限不足
+      ElMessage.error(res.message || '无权限访问')
+      const current = router.currentRoute.value.path || ''
+      if (current.startsWith('/admin')) {
+        router.push('/admin/login')
+      }
+      return Promise.reject(new Error(res.message || '无权限访问'))
+    }
+
     // 其他业务错误，统一提示
     ElMessage.error(res.message || '系统繁忙，请稍后重试')
     return Promise.reject(new Error(res.message || 'Error'))
