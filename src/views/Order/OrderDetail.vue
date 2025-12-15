@@ -128,11 +128,11 @@ onUnmounted(() => {
 
         <div class="section-card">
             <h3>收货人信息</h3>
-            <div class="info-row" v-if="order.address">
-                <div>收货人：{{ order.address.receiverName }}</div>
-                <div>联系电话：{{ order.address.receiverPhone }}</div>
-                <div>收货地址：{{ order.address.province }} {{ order.address.city }} {{ order.address.district }} {{
-                    order.address.detailAddress }}</div>
+            <div class="info-row" v-if="order.addressSnapshot">
+                <div>收货人：{{ order.addressSnapshot.receiverName }}</div>
+                <div>联系电话：{{ order.addressSnapshot.receiverPhone }}</div>
+                <div>收货地址：{{ order.addressSnapshot.province }} {{ order.addressSnapshot.city }}
+                    {{ order.addressSnapshot.district }} {{ order.addressSnapshot.detailAddress }}</div>
             </div>
         </div>
 

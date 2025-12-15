@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { uploadFile } from '@/api/auth'
 import {
@@ -141,8 +141,8 @@ const openEdit = (row) => {
 
   // 处理图片列表回显
   // 后端 List<String> 序列化后就是 JS Array
-  const images = row.imageList || row.images || []
-  form.imageList = [...images]
+  const imagesStr = row.imageList || ''
+  form.imageList = imagesStr ? imagesStr.split(',') : []
 
   // 构造 Upload 组件需要的 fileList
   galleryFileList.value = form.imageList.map((url, idx) => ({
@@ -259,6 +259,13 @@ const handlePageChange = (page) => {
 
 onMounted(() => {
   loadCategories()
+  loadList()
+})
+
+// 【新增】每次切换回这个页面时，自动刷新分类数据
+onActivated(() => {
+  loadCategories()
+  // 建议也刷新一下列表，防止数据过时
   loadList()
 })
 </script>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAdminOrderList, getAdminOrderDetail, updateAdminOrderStatus } from '@/api/admin'
 
@@ -94,6 +94,10 @@ const handleUpdateStatus = (order, status, remark) => {
 }
 
 onMounted(() => {
+  loadList()
+})
+
+onActivated(() => {
   loadList()
 })
 </script>
