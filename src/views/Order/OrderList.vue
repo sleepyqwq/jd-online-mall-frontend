@@ -127,8 +127,8 @@ onMounted(() => {
         </div>
 
         <div class="pagination-box" v-if="total > 0">
-            <el-pagination background layout="prev, pager, next" :total="total" :page-size="queryParams.pageSize"
-                @current-change="handlePageChange" />
+            <el-pagination background layout="prev, pager, next" :total="Number(total)"
+                :page-size="queryParams.pageSize" @current-change="handlePageChange" />
         </div>
     </div>
 </template>

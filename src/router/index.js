@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/userStore'
+import { useAdminStore } from '@/stores/adminStore'
 
 const routes = [
   // --- 用户端路由 ---
@@ -63,7 +64,7 @@ const routes = [
     meta: { title: '商品详情' },
   },
 
-  // --- 管理员端路由 (新增) ---
+  // --- 管理员端路由 ---
   {
     path: '/admin/login',
     name: 'AdminLogin',
@@ -89,30 +90,40 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
+  const adminStore = useAdminStore() // 获取 adminStore
 
   if (to.meta.title) {
     document.title = `${to.meta.title} - 京东商城模拟`
   }
 
+  // 判断是否是后台路由
+  const isAdminRoute = to.path.startsWith('/admin')
+
   // 权限校验
   if (to.meta.requiresAuth) {
-    if (!userStore.token) {
-      // 未登录：根据访问的是后台还是前台，跳转不同登录页
-      if (to.path.startsWith('/admin')) {
+    if (isAdminRoute) {
+      // --- 后台权限逻辑 ---
+      if (!adminStore.token) {
         next('/admin/login')
       } else {
-        next({ path: '/login', query: { redirect: to.fullPath } })
+        // 这里简单校验一下角色，严谨的话后端接口会拦截
+        if (to.meta.role === 'ADMIN' && adminStore.userInfo.role !== 'ADMIN') {
+          // 有 Token 但角色不对（虽然理论上 adminLogin 只允许 ADMIN）
+          next('/admin/login')
+        } else {
+          next()
+        }
       }
     } else {
-      // 已登录：如果是后台页面，额外校验角色
-      if (to.meta.role === 'ADMIN' && userStore.userInfo.role !== 'ADMIN') {
-        // 简单处理：跳回首页或提示无权限，这里先跳用户首页
-        next('/')
+      // --- 前台权限逻辑 ---
+      if (!userStore.token) {
+        next({ path: '/login', query: { redirect: to.fullPath } })
       } else {
         next()
       }
     }
   } else {
+    // 不需要登录的页面
     next()
   }
 })

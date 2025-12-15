@@ -17,22 +17,28 @@ const form = reactive({
     city: '',
     district: '',
     detailAddress: '',
-    isDefault: false
+    isDefault: false // Element Plus Switch 绑定布尔值
 })
 
+// 【修改点1】补全缺失的校验规则，与后端 @NotBlank 对应
 const rules = {
     receiverName: [{ required: true, message: '请输入收货人姓名', trigger: 'blur' }],
     receiverPhone: [{ required: true, message: '请输入联系电话', trigger: 'blur' }],
+    province: [{ required: true, message: '请输入省份', trigger: 'blur' }],
+    city: [{ required: true, message: '请输入城市', trigger: 'blur' }],
+    district: [{ required: true, message: '请输入区县', trigger: 'blur' }],
     detailAddress: [{ required: true, message: '请输入详细地址', trigger: 'blur' }]
-    // 省市区这里简化为输入框，实际项目通常用 el-cascader
 }
 
-// 加载地址列表
 const loadData = async () => {
     loading.value = true
     try {
         const res = await getAddressList()
-        list.value = res || []
+        // 后端返回的是 0/1，前端 switch 需要 boolean，这里做一个转换处理显示
+        list.value = (res || []).map(item => ({
+            ...item,
+            isDefault: item.isDefault === 1
+        }))
     } catch (error) {
         console.error(error)
     } finally {
@@ -40,32 +46,50 @@ const loadData = async () => {
     }
 }
 
-// 打开新增弹窗
 const openAdd = () => {
     isEdit.value = false
-    Object.keys(form).forEach(key => {
-        form[key] = key === 'isDefault' ? false : ''
-    })
+    // 重置表单
+    form.id = ''
+    form.receiverName = ''
+    form.receiverPhone = ''
+    form.province = ''
+    form.city = ''
+    form.district = ''
+    form.detailAddress = ''
+    form.isDefault = false
+
+    // 清除校验红字
+    if (formRef.value) formRef.value.resetFields()
+
     dialogVisible.value = true
 }
 
-// 打开编辑弹窗
 const openEdit = (row) => {
     isEdit.value = true
+    // 对象拷贝，回显数据
     Object.assign(form, row)
+    // 确保回显时 switch 状态正确 (row.isDefault 可能是 boolean 或 0/1，视 loadData 处理而定)
+    // 这里因为 loadData 已经转了 boolean，直接赋值即可
     dialogVisible.value = true
 }
 
-// 提交表单
-const handleSubmit = async () => {
-    await formRef.value.validate(async (valid) => {
+const handleSubmit = () => {
+    if (!formRef.value) return
+
+    formRef.value.validate(async (valid) => {
         if (valid) {
+            // 【修改点2】构造提交参数，将 boolean 转为 0/1
+            const payload = {
+                ...form,
+                isDefault: form.isDefault ? 1 : 0
+            }
+
             try {
                 if (isEdit.value) {
-                    await updateAddress(form.id, form)
+                    await updateAddress(form.id, payload)
                     ElMessage.success('修改成功')
                 } else {
-                    await addAddress(form)
+                    await addAddress(payload)
                     ElMessage.success('添加成功')
                 }
                 dialogVisible.value = false
@@ -77,7 +101,6 @@ const handleSubmit = async () => {
     })
 }
 
-// 删除
 const handleDelete = (id) => {
     ElMessageBox.confirm('确定删除该地址吗？', '提示', { type: 'warning' })
         .then(async () => {
@@ -88,7 +111,6 @@ const handleDelete = (id) => {
         .catch(() => { })
 }
 
-// 设为默认
 const handleSetDefault = async (id) => {
     try {
         await setDefaultAddress(id)
@@ -138,13 +160,13 @@ onMounted(() => {
             </el-table>
         </div>
 
-        <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑收货地址' : '新增收货地址'" width="500px">
+        <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑收货地址' : '新增收货地址'" width="500px" destroy-on-close>
             <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
                 <el-form-item label="收货人" prop="receiverName">
-                    <el-input v-model="form.receiverName" />
+                    <el-input v-model="form.receiverName" placeholder="请输入收货人姓名" />
                 </el-form-item>
                 <el-form-item label="联系电话" prop="receiverPhone">
-                    <el-input v-model="form.receiverPhone" />
+                    <el-input v-model="form.receiverPhone" placeholder="请输入手机号码" maxlength="11" />
                 </el-form-item>
                 <el-form-item label="省份" prop="province">
                     <el-input v-model="form.province" placeholder="如：北京市" />
@@ -156,7 +178,7 @@ onMounted(() => {
                     <el-input v-model="form.district" placeholder="如：朝阳区" />
                 </el-form-item>
                 <el-form-item label="详细地址" prop="detailAddress">
-                    <el-input v-model="form.detailAddress" type="textarea" />
+                    <el-input v-model="form.detailAddress" type="textarea" placeholder="街道、楼牌号等" />
                 </el-form-item>
                 <el-form-item label="默认地址" prop="isDefault">
                     <el-switch v-model="form.isDefault" />

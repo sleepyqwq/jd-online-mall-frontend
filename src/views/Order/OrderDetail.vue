@@ -1,5 +1,6 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+// 【修正】补充引入 onUnmounted
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { getOrderDetail, payOrder, cancelOrder } from '@/api/order'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -37,6 +38,13 @@ const loadDetail = async () => {
     }
 }
 
+// 倒计时逻辑
+const remainingSeconds = computed(() => {
+    if (!order.value.expireTime) return 0
+    // 兼容后端时间格式 'yyyy-MM-dd HH:mm:ss' -> 'yyyy-MM-ddTHH:mm:ss'
+    return new Date(order.value.expireTime.replace(' ', 'T')).getTime() - nowTime.value
+})
+
 const startTimer = () => {
     stopTimer()
     timer.value = setInterval(() => {
@@ -55,7 +63,6 @@ const stopTimer = () => {
         timer.value = null
     }
 }
-
 
 // 支付
 const handlePay = async () => {
@@ -84,7 +91,6 @@ const handleCancel = () => {
 const remainingTime = computed(() => {
     if (order.value.status !== 'WAIT_PAY' || !order.value.expireTime) return ''
 
-    // 解析后端时间字符串 'yyyy-MM-dd HH:mm:ss'，需注意浏览器兼容性，最好替换 ' ' 为 'T'
     const expireDate = new Date(order.value.expireTime.replace(' ', 'T'))
     const diff = expireDate.getTime() - nowTime.value
 
@@ -95,19 +101,14 @@ const remainingTime = computed(() => {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 })
 
-const remainingSeconds = computed(() => {
-    if (!order.value.expireTime) return 0
-    return new Date(order.value.expireTime.replace(' ', 'T')).getTime() - nowTime.value
-})
-
 onMounted(() => {
     loadDetail()
 })
 
+// 【修正】现在这里可以正常工作了
 onUnmounted(() => {
     stopTimer()
 })
-
 </script>
 
 <template>

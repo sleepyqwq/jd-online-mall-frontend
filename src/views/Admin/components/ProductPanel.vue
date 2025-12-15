@@ -331,7 +331,7 @@ onMounted(() => {
     </el-table>
 
     <div class="pager" v-if="total > 0">
-      <el-pagination background layout="prev, pager, next" :total="total" :page-size="query.pageSize"
+      <el-pagination background layout="prev, pager, next" :total="Number(total)" :page-size="query.pageSize"
         v-model:current-page="query.pageNum" @current-change="handlePageChange" />
     </div>
 
@@ -468,5 +468,152 @@ onMounted(() => {
   color: #999;
   font-size: 12px;
   margin-top: 6px;
+}
+
+/* 1. 卡片容器：半透明磨砂质感 */
+.panel-card {
+  /* 0.95 不透明度，既保证内容可读性，又有一点通透感 */
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(20px);
+  /* 磨砂效果 */
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 20px !important;
+  padding: 30px 35px !important;
+  /* 柔和的光晕阴影 */
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  transition: transform 0.3s ease;
+}
+
+/* 2. 头部标题 */
+.panel-title {
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  /* 渐变文字 */
+  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.5px;
+}
+
+.panel-subtitle {
+  color: #64748b !important;
+  font-size: 13px !important;
+  margin-top: 8px !important;
+}
+
+/* 3. 筛选栏 */
+.filter-bar {
+  background: rgba(248, 250, 252, 0.6) !important;
+  /* 更淡的背景 */
+  padding: 18px 24px 6px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(226, 232, 240, 0.6) !important;
+}
+
+/* 4. Element Plus 表格美化 */
+:deep(.el-table) {
+  border-radius: 12px;
+  overflow: hidden;
+  /* 表格背景透明，透出卡片背景 */
+  background-color: transparent !important;
+  --el-table-tr-bg-color: transparent !important;
+}
+
+:deep(.el-table th.el-table__cell) {
+  background-color: rgba(241, 245, 249, 0.5) !important;
+  /* 半透明表头 */
+  color: #475569;
+  font-weight: 700;
+  height: 50px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+:deep(.el-table td.el-table__cell) {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.03) !important;
+}
+
+:deep(.el-table--enable-row-hover .el-table__body tr:hover > td) {
+  background-color: rgba(241, 245, 249, 0.8) !important;
+}
+
+/* 5. 按钮美化 (重点修正) */
+
+/* 主要操作按钮 (新增商品等) */
+:deep(.el-button--primary) {
+  /* 更加时尚的蓝紫渐变 */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+  font-weight: 500;
+  padding: 10px 20px;
+  height: auto;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+:deep(.el-button--primary:hover) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(118, 75, 162, 0.4);
+}
+
+/* 文本操作按钮 (表格内的编辑/删除) */
+/* 统一先给 text 按钮加一点内边距 */
+:deep(.el-button.is-text) {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+/* 编辑按钮 - 改为柔和的蓝色背景块 */
+:deep(.el-button--primary.is-text) {
+  background-color: rgba(58, 123, 213, 0.1);
+  color: #ffffff !important;
+}
+
+:deep(.el-button--primary.is-text:hover) {
+  background-color: rgba(58, 123, 213, 0.2);
+}
+
+/* 下架/上架按钮 - 橙色背景块 */
+:deep(.el-button--warning.is-text) {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #f59e0b !important;
+}
+
+:deep(.el-button--warning.is-text:hover) {
+  background-color: rgba(245, 158, 11, 0.2);
+}
+
+/* 删除按钮 - 红色背景块 */
+:deep(.el-button--danger.is-text) {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444 !important;
+}
+
+:deep(.el-button--danger.is-text:hover) {
+  background-color: rgba(239, 68, 68, 0.2);
+}
+
+/* 标签美化 */
+:deep(.el-tag) {
+  border-radius: 6px;
+  padding: 0 12px;
+  font-weight: 600;
+  border: none;
+  letter-spacing: 0.5px;
+}
+
+/* 上架状态 */
+:deep(.el-tag--success) {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+}
+
+/* 下架状态 */
+:deep(.el-tag--info) {
+  background: rgba(148, 163, 184, 0.15);
+  color: #64748b;
 }
 </style>

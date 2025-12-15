@@ -23,7 +23,13 @@ const loadDetail = async () => {
         const res = await getProductDetail(id)
         product.value = res
         // 默认显示主图
-        currentImage.value = res.mainImage || ''
+        if (res.mainImage) {
+            currentImage.value = res.mainImage
+        } else if (res.images && res.images.length > 0) {
+            currentImage.value = res.images[0]
+        } else {
+            currentImage.value = ''
+        }
     } catch (error) {
         console.error(error)
         ElMessage.error('获取商品详情失败')
