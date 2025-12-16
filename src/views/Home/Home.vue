@@ -2,26 +2,41 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCategoryTree, getProductList } from '@/api/product'
+// 1. 引入 banner API
+import { getHomeBannerList } from '@/api/banner'
 
 const router = useRouter()
 const categoryTree = ref([])
 const hotProducts = ref([])
+// 2. 定义 banner 数据
+const bannerList = ref([])
 const loading = ref(true)
 
 // 初始化加载数据
 onMounted(async () => {
     try {
-        // 1. 获取分类树
-        const cateRes = await getCategoryTree()
-        categoryTree.value = cateRes || []
+        // 并行请求数据，提升加载速度
+        const [cateRes, bannerRes, prodRes] = await Promise.allSettled([
+            getCategoryTree(),
+            getHomeBannerList(),
+            getProductList({ pageNum: 1, pageSize: 8 })
+        ])
 
-        // 2. 尝试获取商品 (容错处理：如果后端没写商品接口，不影响分类显示)
-        try {
-            const prodRes = await getProductList({ pageNum: 1, pageSize: 8 })
-            hotProducts.value = prodRes.list || []
-        } catch (e) {
-            console.warn('商品接口暂未实现或报错，跳过加载')
+        // 处理分类
+        if (cateRes.status === 'fulfilled') {
+            categoryTree.value = cateRes.value || []
         }
+
+        // 3. 处理轮播图
+        if (bannerRes.status === 'fulfilled') {
+            bannerList.value = bannerRes.value || []
+        }
+
+        // 处理热门商品
+        if (prodRes.status === 'fulfilled') {
+            hotProducts.value = prodRes.value.list || []
+        }
+
     } catch (error) {
         console.error('Home data load failed', error)
     } finally {
@@ -38,6 +53,19 @@ const handleCategoryClick = (categoryId) => {
 const goToDetail = (id) => {
     router.push(`/products/${id}`)
 }
+
+// 4. 点击轮播图跳转逻辑
+const handleBannerClick = (item) => {
+    if (item.redirectUrl) {
+        // 如果是站内链接 (以 / 开头)，使用 router 跳转
+        if (item.redirectUrl.startsWith('/')) {
+            router.push(item.redirectUrl)
+        } else {
+            // 否则视为外部链接，新窗口打开
+            window.open(item.redirectUrl, '_blank')
+        }
+    }
+}
 </script>
 
 <template>
@@ -53,7 +81,6 @@ const goToDetail = (id) => {
                                 <ArrowRight />
                             </el-icon>
                         </div>
-
                         <div class="sub-cat-popover" v-if="cat.children && cat.children.length > 0">
                             <div class="popover-content">
                                 <div v-for="sub in cat.children" :key="sub.id" class="sub-item"
@@ -67,11 +94,14 @@ const goToDetail = (id) => {
             </div>
 
             <div class="content-area">
-                <el-carousel height="400px" class="banner">
-                    <el-carousel-item v-for="item in 3" :key="item">
+                <el-carousel height="440px" class="banner" :interval="4000">
+                    <el-carousel-item v-for="item in bannerList" :key="item.id">
+                        <img :src="item.imgUrl" class="banner-img" @click="handleBannerClick(item)" />
+                    </el-carousel-item>
+
+                    <el-carousel-item v-if="bannerList.length === 0">
                         <div class="banner-placeholder">
-                            <h3>活动展示位 {{ item }}</h3>
-                            <p>（此处展示轮播图）</p>
+                            <h3>暂无活动</h3>
                         </div>
                     </el-carousel-item>
                 </el-carousel>
@@ -95,6 +125,7 @@ const goToDetail = (id) => {
 </template>
 
 <style scoped>
+/* 保持原有样式，新增 banner-img 样式 */
 .home-container {
     padding-top: 20px;
     padding-bottom: 40px;
@@ -103,19 +134,16 @@ const goToDetail = (id) => {
 .main-area {
     display: flex;
     gap: 10px;
-    /* 减小间隙，防止鼠标移动时弹层消失 */
     margin-bottom: 30px;
 }
 
-/* --- 分类侧边栏核心样式 --- */
 .category-sidebar {
     width: 200px;
     background: #fff;
     border: 1px solid #ddd;
     height: 440px;
-    /* 稍微调高一点，配合轮播图高度 */
+    /* 确保侧边栏高度与轮播图一致 */
     position: relative;
-    /* 关键：作为绝对定位的父容器 */
     z-index: 101;
     box-sizing: border-box;
 }
@@ -123,7 +151,6 @@ const goToDetail = (id) => {
 .cat-title {
     padding: 10px 15px;
     background: #e4393c;
-    /* 京东红背景 */
     color: #fff;
     font-weight: bold;
     font-size: 16px;
@@ -132,12 +159,6 @@ const goToDetail = (id) => {
 .cat-list {
     padding: 0;
     margin: 0;
-}
-
-.cat-item {
-    /* 注意：这里去掉了 position: relative */
-    /* 这样子元素的 absolute 就会去寻找最近的 relative 祖先（也就是 category-sidebar） */
-    /* 从而实现二级菜单始终与侧边栏顶部对齐 */
 }
 
 .cat-label {
@@ -153,35 +174,27 @@ const goToDetail = (id) => {
     transition: background-color 0.2s;
 }
 
-/* 鼠标悬停一级分类时的样式 */
 .cat-item:hover .cat-label {
     background-color: #d9d9d9;
     color: #e4393c;
     font-weight: bold;
 }
 
-/* --- 二级分类弹层样式 --- */
 .sub-cat-popover {
     display: none;
-    /* 【关键】默认隐藏 */
     position: absolute;
     left: 199px;
-    /* 紧贴侧边栏右侧 (200px宽度 - 1px边框) */
     top: 0;
     width: 600px;
-    /* 弹层宽度 */
     height: 100%;
-    /* 高度铺满侧边栏 */
     background: #fff;
     border: 1px solid #ddd;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
     z-index: 200;
-    /* 确保在轮播图之上 */
     padding: 20px;
     box-sizing: border-box;
 }
 
-/* 【关键】鼠标悬停在一级项上时，显示其内部的弹层 */
 .cat-item:hover .sub-cat-popover {
     display: block;
 }
@@ -199,11 +212,9 @@ const goToDetail = (id) => {
     color: #666;
     padding: 0 10px;
     border-left: 1px solid #eee;
-    /* 左侧分割线 */
     line-height: 1.2;
 }
 
-/* 去掉第一个子项的左边框，解决“| 手机”这种丑陋的显示 */
 .sub-item:first-child {
     border-left: none;
     padding-left: 0;
@@ -214,16 +225,23 @@ const goToDetail = (id) => {
     text-decoration: underline;
 }
 
-/* --- 右侧轮播图与内容 --- */
 .content-area {
     flex: 1;
     overflow: hidden;
-    /* 防止溢出 */
 }
 
 .banner {
-    border-radius: 8px;
-    /* 圆角美化 */
+    border-radius: 0;
+    /* 根据JD风格，通常不需要大圆角，如果需要可设为 8px */
+}
+
+/* --- 新增样式: 轮播图图片填充 --- */
+.banner-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* 保证图片填满且不变形 */
+    cursor: pointer;
 }
 
 .banner-placeholder {
@@ -236,7 +254,6 @@ const goToDetail = (id) => {
     color: #999;
 }
 
-/* --- 商品网格 --- */
 .section-title {
     font-size: 22px;
     font-weight: bold;

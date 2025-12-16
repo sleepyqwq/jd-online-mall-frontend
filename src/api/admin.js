@@ -134,3 +134,43 @@ export const updateAdminOrderStatus = (orderId, status, remark) => {
     data: { status, remark },
   })
 }
+
+// ================== 轮播图管理 ==================
+export const getAdminBannerList = (params) => {
+  return request({
+    url: '/admin/banners',
+    method: 'get',
+    params,
+  })
+}
+
+export const createAdminBanner = (data) => {
+  return request({
+    url: '/admin/banners',
+    method: 'post',
+    data,
+  })
+}
+
+export const updateAdminBanner = (id, data) => {
+  return request({
+    url: `/admin/banners/${id}`,
+    method: 'put',
+    data,
+  })
+}
+
+export const deleteAdminBanner = (id) => {
+  return request({
+    url: `/admin/banners/${id}`,
+    method: 'delete',
+  })
+}
+
+export const updateAdminBannerStatus = (id, status) => {
+  return request({
+    url: `/admin/banners/${id}/status`,
+    method: 'put',
+    data: { status },
+  })
+}

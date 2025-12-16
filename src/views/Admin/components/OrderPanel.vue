@@ -187,15 +187,25 @@ onActivated(() => {
         <el-descriptions-item label="创建时间">{{ orderDetail.createTime }}</el-descriptions-item>
         <el-descriptions-item label="支付时间">{{ orderDetail.payTime || '-' }}</el-descriptions-item>
         <el-descriptions-item label="取消时间">{{ orderDetail.cancelTime || '-' }}</el-descriptions-item>
+
+        <el-descriptions-item label="订单备注" :span="2">
+          {{ orderDetail.remark || '无' }}
+        </el-descriptions-item>
+
+        <el-descriptions-item label="取消原因" :span="2" v-if="orderDetail.cancelReason">
+          {{ orderDetail.cancelReason }}
+        </el-descriptions-item>
       </el-descriptions>
 
       <div class="block-title">收货信息</div>
-      <div class="address-box" v-if="orderDetail.address">
-        <div>收货人：{{ orderDetail.address.receiverName }}</div>
-        <div>联系电话：{{ orderDetail.address.receiverPhone }}</div>
-        <div>地址：{{ orderDetail.address.province }} {{ orderDetail.address.city }} {{ orderDetail.address.district }}
-          {{ orderDetail.address.detailAddress }}</div>
+      <div class="address-box" v-if="orderDetail.addressSnapshot">
+        <div>收货人：{{ orderDetail.addressSnapshot.receiverName }}</div>
+        <div>联系电话：{{ orderDetail.addressSnapshot.receiverPhone }}</div>
+        <div>地址：{{ orderDetail.addressSnapshot.province }} {{ orderDetail.addressSnapshot.city }} {{
+          orderDetail.addressSnapshot.district }}
+          {{ orderDetail.addressSnapshot.detailAddress }}</div>
       </div>
+      <div v-else class="empty-tip">暂无收货信息</div>
 
       <div class="block-title">商品清单</div>
       <el-table :data="orderDetail.items || []" border size="small">
@@ -267,6 +277,12 @@ onActivated(() => {
   border-radius: 6px;
   border: 1px solid #eee;
   line-height: 1.7;
+}
+
+.empty-tip {
+  color: #999;
+  padding: 10px 0;
+  font-size: 13px;
 }
 
 .goods-info {

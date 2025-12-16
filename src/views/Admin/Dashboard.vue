@@ -7,6 +7,7 @@ import { adminLogout, getAdminInfo } from '@/api/admin'
 import ProductPanel from './components/ProductPanel.vue'
 import CategoryPanel from './components/CategoryPanel.vue'
 import OrderPanel from './components/OrderPanel.vue'
+import BannerPanel from './components/BannerPanel.vue'
 // 引入 UI 装饰所需的额外图标
 import { ArrowDown, SwitchButton, UserFilled, DataBoard } from '@element-plus/icons-vue'
 
@@ -19,6 +20,7 @@ const menus = [
   { key: 'products', label: '商品管理', icon: 'Goods' },
   { key: 'orders', label: '订单管理', icon: 'List' },
   { key: 'categories', label: '分类管理', icon: 'Menu' },
+  { key: 'banners', label: '轮播图', icon: 'Picture' }, // 新增
 ]
 
 const userName = computed(() => adminStore.userInfo.nickname || adminStore.userInfo.username || '管理员')
@@ -116,8 +118,10 @@ const handleLogout = async () => {
       <main class="content-area scrollbar-beauty">
         <transition name="fade-transform" mode="out-in">
           <keep-alive>
-            <component
-              :is="activeMenu === 'products' ? ProductPanel : (activeMenu === 'orders' ? OrderPanel : CategoryPanel)" />
+            <component :is="activeMenu === 'products' ? ProductPanel :
+              (activeMenu === 'orders' ? OrderPanel :
+                (activeMenu === 'categories' ? CategoryPanel : BannerPanel))
+              " />
           </keep-alive>
         </transition>
       </main>
