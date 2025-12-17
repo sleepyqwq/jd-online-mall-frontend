@@ -2,66 +2,68 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCategoryTree, getProductList } from '@/api/product'
-// 1. 引入 banner API
 import { getHomeBannerList } from '@/api/banner'
+import { ArrowRight } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const categoryTree = ref([])
 const hotProducts = ref([])
-// 2. 定义 banner 数据
 const bannerList = ref([])
 const loading = ref(true)
 
-// 初始化加载数据
+// --- 滑块动画逻辑 ---
+const sliderTop = ref(0)
+const showSlider = ref(false)
+const ITEM_HEIGHT = 42
+const LIST_PADDING_TOP = 10
+
+const handleMouseEnter = (index) => {
+    sliderTop.value = index * ITEM_HEIGHT + LIST_PADDING_TOP
+    showSlider.value = true
+}
+
+const handleMouseLeave = () => {
+    showSlider.value = false
+}
+
+// 初始化数据
 onMounted(async () => {
     try {
-        // 并行请求数据，提升加载速度
         const [cateRes, bannerRes, prodRes] = await Promise.allSettled([
             getCategoryTree(),
             getHomeBannerList(),
             getProductList({ pageNum: 1, pageSize: 8 })
         ])
 
-        // 处理分类
         if (cateRes.status === 'fulfilled') {
             categoryTree.value = cateRes.value || []
         }
-
-        // 3. 处理轮播图
         if (bannerRes.status === 'fulfilled') {
             bannerList.value = bannerRes.value || []
         }
-
-        // 处理热门商品
         if (prodRes.status === 'fulfilled') {
             hotProducts.value = prodRes.value.list || []
         }
-
     } catch (error) {
-        console.error('Home data load failed', error)
+        console.error(error)
     } finally {
         loading.value = false
     }
 })
 
-// 点击一级分类跳转
 const handleCategoryClick = (categoryId) => {
     router.push({ path: '/products', query: { categoryId } })
 }
 
-// 点击商品跳转
 const goToDetail = (id) => {
     router.push(`/products/${id}`)
 }
 
-// 4. 点击轮播图跳转逻辑
 const handleBannerClick = (item) => {
     if (item.redirectUrl) {
-        // 如果是站内链接 (以 / 开头)，使用 router 跳转
         if (item.redirectUrl.startsWith('/')) {
             router.push(item.redirectUrl)
         } else {
-            // 否则视为外部链接，新窗口打开
             window.open(item.redirectUrl, '_blank')
         }
     }
@@ -70,20 +72,30 @@ const handleBannerClick = (item) => {
 
 <template>
     <div class="home-container container">
-        <div class="main-area">
+
+        <div class="hero-section">
+
             <div class="category-sidebar">
-                <div class="cat-title">全部分类</div>
-                <ul class="cat-list">
-                    <li v-for="cat in categoryTree" :key="cat.id" class="cat-item">
+                <div class="sidebar-header">主题频道</div>
+
+                <ul class="cat-list" @mouseleave="handleMouseLeave">
+                    <div class="hover-slider" :style="{
+                        transform: `translateY(${sliderTop}px)`,
+                        opacity: showSlider ? 1 : 0
+                    }"></div>
+
+                    <li v-for="(cat, index) in categoryTree" :key="cat.id" class="cat-item"
+                        @mouseenter="handleMouseEnter(index)">
                         <div class="cat-label" @click="handleCategoryClick(cat.id)">
-                            <span>{{ cat.name }}</span>
-                            <el-icon>
+                            <span class="label-text">{{ cat.name }}</span>
+                            <el-icon class="arrow-icon">
                                 <ArrowRight />
                             </el-icon>
                         </div>
+
                         <div class="sub-cat-popover" v-if="cat.children && cat.children.length > 0">
                             <div class="popover-content">
-                                <div v-for="sub in cat.children" :key="sub.id" class="sub-item"
+                                <div v-for="sub in cat.children" :key="sub.id" class="sub-item-card"
                                     @click.stop="handleCategoryClick(sub.id)">
                                     {{ sub.name }}
                                 </div>
@@ -93,31 +105,40 @@ const handleBannerClick = (item) => {
                 </ul>
             </div>
 
-            <div class="content-area">
-                <el-carousel height="440px" class="banner" :interval="4000">
+            <div class="banner-area">
+                <el-carousel height="440px" :interval="5000" arrow="hover">
                     <el-carousel-item v-for="item in bannerList" :key="item.id">
                         <img :src="item.imgUrl" class="banner-img" @click="handleBannerClick(item)" />
                     </el-carousel-item>
-
                     <el-carousel-item v-if="bannerList.length === 0">
                         <div class="banner-placeholder">
-                            <h3>暂无活动</h3>
+                            <h3>暂无精彩活动</h3>
                         </div>
                     </el-carousel-item>
                 </el-carousel>
             </div>
+
         </div>
 
-        <div class="section-title">热门推荐</div>
-        <div class="product-grid" v-loading="loading">
-            <el-empty v-if="hotProducts.length === 0" description="暂无热门商品" />
-            <div v-for="prod in hotProducts" :key="prod.id" class="product-card" @click="goToDetail(prod.id)">
-                <div class="img-wrapper">
-                    <img :src="prod.mainImage || ''" alt="商品图片" class="prod-img">
-                </div>
-                <div class="prod-info">
-                    <div class="price">¥ {{ prod.price }}</div>
-                    <div class="title" :title="prod.title">{{ prod.title }}</div>
+        <div class="recommend-section">
+            <div class="section-header">
+                <span class="title-main">热门推荐</span>
+                <span class="title-sub">品质生活，精选好物</span>
+            </div>
+
+            <div class="product-grid" v-loading="loading">
+                <el-empty v-if="hotProducts.length === 0" description="暂无热门商品" />
+                <div v-for="prod in hotProducts" :key="prod.id" class="product-card" @click="goToDetail(prod.id)">
+                    <div class="img-wrapper">
+                        <img :src="prod.mainImage || ''" loading="lazy" alt="商品图片" class="prod-img">
+                    </div>
+                    <div class="prod-info">
+                        <div class="price-row">
+                            <span class="currency">¥</span>
+                            <span class="amount">{{ prod.price }}</span>
+                        </div>
+                        <div class="title" :title="prod.title">{{ prod.title }}</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -125,151 +146,260 @@ const handleBannerClick = (item) => {
 </template>
 
 <style scoped>
-/* 保持原有样式，新增 banner-img 样式 */
 .home-container {
     padding-top: 20px;
-    padding-bottom: 40px;
+    padding-bottom: 60px;
 }
 
-.main-area {
+/* --- Hero Section (保持分离布局) --- */
+.hero-section {
     display: flex;
-    gap: 10px;
-    margin-bottom: 30px;
+    margin-bottom: 40px;
+    gap: 20px;
+    /* 侧边栏和轮播图之间的间距 */
+    overflow: visible;
 }
 
+/* --- 侧边栏 (左侧独立卡片) --- */
 .category-sidebar {
-    width: 200px;
-    background: #fff;
-    border: 1px solid #ddd;
+    width: 240px;
     height: 440px;
-    /* 确保侧边栏高度与轮播图一致 */
+    background: #fff;
     position: relative;
     z-index: 101;
-    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    /* 初始阴影 */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    /* 侧边栏整体交互：鼠标移上去微微上浮，增加立体感 */
+    transition: all 0.3s ease;
+    border: 1px solid #f0f0f0;
 }
 
-.cat-title {
-    padding: 10px 15px;
-    background: #e4393c;
-    color: #fff;
-    font-weight: bold;
-    font-size: 16px;
+.category-sidebar:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+    border-color: transparent;
+}
+
+.sidebar-header {
+    height: 46px;
+    line-height: 46px;
+    padding-left: 24px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    letter-spacing: 1px;
+    position: relative;
+    z-index: 102;
+    border-bottom: 1px solid #f5f5f5;
 }
 
 .cat-list {
-    padding: 0;
+    flex: 1;
+    padding: 10px 0;
     margin: 0;
+    position: relative;
+}
+
+/* 滑动高亮块 */
+.hover-slider {
+    position: absolute;
+    left: 0;
+    top: 0;
+    box-sizing: border-box;
+    width: 100%;
+    height: 42px;
+    background-color: #fff0f0;
+    z-index: 100;
+    transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s;
+    pointer-events: none;
+    border-left: 3px solid var(--primary-color);
+}
+
+.cat-item {
+    position: relative;
+    z-index: 101;
 }
 
 .cat-label {
-    padding: 0 15px;
-    height: 40px;
-    line-height: 40px;
-    cursor: pointer;
+    height: 42px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    cursor: pointer;
     font-size: 14px;
     color: #333;
-    transition: background-color 0.2s;
+    transition: color 0.2s;
+    line-height: 1;
+}
+
+.arrow-icon {
+    font-size: 12px;
+    color: #ccc;
+    transition: color 0.2s;
 }
 
 .cat-item:hover .cat-label {
-    background-color: #d9d9d9;
-    color: #e4393c;
-    font-weight: bold;
+    color: var(--primary-color);
+    font-weight: 500;
 }
 
+.cat-item:hover .arrow-icon {
+    color: var(--primary-color);
+}
+
+/* --- 弹窗样式 (向右弹出) --- */
 .sub-cat-popover {
-    display: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-10px);
+    /* 初始位置略微偏左，营造向右滑出的感觉 */
+
     position: absolute;
-    left: 199px;
+    left: 240px;
+    /* 紧贴侧边栏右侧 */
     top: 0;
-    width: 600px;
-    height: 100%;
+    width: 500px;
+    height: 440px;
     background: #fff;
-    border: 1px solid #ddd;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    box-shadow: 8px 0 20px rgba(0, 0, 0, 0.08);
+    /* 阴影向右 */
     z-index: 200;
     padding: 20px;
     box-sizing: border-box;
+    border-left: 1px solid #f0f0f0;
+
+    transition:
+        opacity 0.2s ease,
+        transform 0.2s ease,
+        visibility 0.2s;
 }
 
 .cat-item:hover .sub-cat-popover {
-    display: block;
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
 }
 
 .popover-content {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    align-content: start;
 }
 
-.sub-item {
+.sub-item-card {
     cursor: pointer;
     font-size: 13px;
     color: #666;
-    padding: 0 10px;
-    border-left: 1px solid #eee;
-    line-height: 1.2;
+    padding: 8px 12px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    background: #f9f9f9;
 }
 
-.sub-item:first-child {
-    border-left: none;
-    padding-left: 0;
+.sub-item-card:hover {
+    color: var(--primary-color);
+    background-color: #fff0f0;
 }
 
-.sub-item:hover {
-    color: var(--el-color-primary);
-    text-decoration: underline;
-}
-
-.content-area {
+/* --- 轮播区域 (右侧独立卡片) --- */
+.banner-area {
     flex: 1;
+    /* 占据剩余宽度 */
+    height: 440px;
+    border-radius: 12px;
     overflow: hidden;
+    position: relative;
+    background-color: #f0f2f5;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
 }
 
-.banner {
-    border-radius: 0;
-    /* 根据JD风格，通常不需要大圆角，如果需要可设为 8px */
+.banner-area:hover {
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
 }
 
-/* --- 新增样式: 轮播图图片填充 --- */
 .banner-img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    /* 保证图片填满且不变形 */
-    cursor: pointer;
+    display: block;
+}
+
+/* 指示器与箭头样式 (保留之前的美化) */
+.banner-area :deep(.el-carousel__indicators) {
+    bottom: 20px;
+}
+
+.banner-area :deep(.el-carousel__indicator) {
+    padding: 12px 6px;
+}
+
+.banner-area :deep(.el-carousel__button) {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.4);
+    border: none;
+    opacity: 1;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.banner-area :deep(.el-carousel__indicator.is-active .el-carousel__button) {
+    width: 24px;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+.banner-area :deep(.el-carousel__arrow) {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+    background-color: rgba(0, 0, 0, 0.2);
+    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(4px);
+    transition: all 0.3s ease;
+}
+
+.banner-area :deep(.el-carousel__arrow:hover) {
+    background-color: rgba(0, 0, 0, 0.5);
+    transform: scale(1.1);
 }
 
 .banner-placeholder {
     height: 100%;
-    background-color: #f5f5f5;
     display: flex;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
     color: #999;
 }
 
-.section-title {
-    font-size: 22px;
-    font-weight: bold;
-    margin: 20px 0;
-    display: flex;
-    align-items: center;
+/* 推荐板块 */
+.recommend-section {
+    margin-top: 40px;
 }
 
-.section-title::before {
-    content: '';
-    display: inline-block;
-    width: 4px;
-    height: 18px;
-    background: #e4393c;
-    margin-right: 10px;
-    border-radius: 2px;
+.section-header {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: baseline;
+}
+
+.title-main {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+    margin-right: 12px;
+}
+
+.title-sub {
+    font-size: 14px;
+    color: #999;
 }
 
 .product-grid {
@@ -280,52 +410,71 @@ const handleBannerClick = (item) => {
 
 .product-card {
     background: #fff;
-    padding: 15px;
-    cursor: pointer;
-    transition: all 0.3s;
     border-radius: 8px;
-    border: 1px solid #f0f0f0;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
 }
 
 .product-card:hover {
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+    transform: translateY(-4px);
+    border-color: #f0f0f0;
 }
 
 .img-wrapper {
     width: 100%;
     height: 200px;
-    background: #f9f9f9;
+    background: #f8f8f8;
+    border-radius: 6px;
+    overflow: hidden;
     margin-bottom: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    overflow: hidden;
 }
 
 .prod-img {
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: 100%;
     object-fit: cover;
+    transition: transform 0.5s;
 }
 
-.price {
+.product-card:hover .prod-img {
+    transform: scale(1.05);
+}
+
+.prod-info {
+    padding: 0 4px;
+}
+
+.price-row {
     color: #e4393c;
-    font-size: 18px;
-    font-weight: bold;
     margin-bottom: 6px;
+    display: flex;
+    align-items: baseline;
+}
+
+.currency {
+    font-size: 14px;
+    margin-right: 2px;
+}
+
+.amount {
+    font-size: 20px;
+    font-weight: bold;
 }
 
 .title {
     font-size: 14px;
     color: #333;
+    line-height: 1.4;
+    height: 40px;
     overflow: hidden;
-    text-overflow: ellipsis;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
-    line-height: 1.5;
-    height: 42px;
 }
 </style>

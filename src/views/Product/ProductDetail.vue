@@ -5,6 +5,9 @@ import { getProductDetail } from '@/api/product'
 import { addToCart } from '@/api/cart'
 import { useUserStore } from '@/stores/userStore'
 import { ElMessage } from 'element-plus'
+import { useCartStore } from '@/stores/cartStore'
+
+const cartStore = useCartStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -56,10 +59,11 @@ const handleAddToCart = async () => {
             productId: product.value.id,
             quantity: buyCount.value
         })
+        await cartStore.fetchCart()
         ElMessage.success('加入购物车成功')
         // 可选：弹窗询问去结算还是继续购物，这里简单处理
     } catch (error) {
-        // 错误已统一处理
+        console.error(error)
     }
 }
 

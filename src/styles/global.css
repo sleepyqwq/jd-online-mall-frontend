@@ -1,31 +1,62 @@
-/* 简单的 Reset 和全局变量 */
+/* src/styles/global.css */
+
+/* 1. 定义全局变量：方便后续统一修改主题色 */
 :root {
-  --el-color-primary: #e4393c; /* 京东红风格 */
+  /* 京东红风格 */
+  --primary-color: #e4393c;
+  --primary-hover: #f56c6c;
+
+  /* 辅助色 */
+  --text-primary: #303133; /* 主要文字 */
+  --text-regular: #606266; /* 常规文字 */
+  --text-secondary: #909399; /* 次要文字 */
+  --bg-body: ##f0f2f5; /* 网页背景灰 */
+  --bg-white: #ffffff;
+  --border-color: #ebeef5;
+
+  /* 布局参数 */
+  --container-width: 1200px; /* 核心内容区域宽度 */
 }
 
+/* 2. 基础重置 */
 body {
   margin: 0;
   padding: 0;
+  background-color: var(--bg-body);
+  color: var(--text-primary);
+  /* 优化字体显示，更清晰 */
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: #f4f4f4;
-  color: #333;
+    'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑',
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
 }
 
 a {
   text-decoration: none;
-  color: inherit;
+  color: var(--text-primary);
+  transition: color 0.2s;
+}
+
+/* 鼠标悬停链接变红 */
+a:hover {
+  color: var(--primary-color);
 }
 
 ul,
-li {
+ol {
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
-/* 统一容器宽度，模拟 PC 端商城 */
+/* 3. 通用容器类 (保持原有的 layout 逻辑) */
 .container {
-  width: 1200px;
+  width: var(--container-width);
   margin: 0 auto;
+}
+
+/* 4. 让 Element Plus 的主色调也跟随我们的变量 (覆盖默认蓝色) */
+:root {
+  --el-color-primary: var(--primary-color);
 }
