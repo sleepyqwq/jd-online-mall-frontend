@@ -1,5 +1,19 @@
+# ======================
+# Dependencies
+# ======================
+/node_modules/
+
+# ======================
+# Build outputs
+# ======================
+/dist/
+/dist-ssr/
+/coverage/
+
+# ======================
 # Logs
-logs
+# ======================
+/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,30 +21,53 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-.DS_Store
-dist
-dist-ssr
-coverage
+# ======================
+# Local env files
+# ======================
 *.local
+.env
+.env.*
+!.env.example
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# ======================
+# Cache files
+# ======================
+.eslintcache
+*.tsbuildinfo
+
+# ======================
+# OS junk
+# ======================
+.DS_Store
+Thumbs.db
+
+# ======================
+# Editor / IDE
+# ======================
+/.idea/
+
+# VS Code：默认忽略整个目录，仅共享必要配置文件
+/.vscode/*
+!/.vscode/extensions.json
+!/.vscode/settings.json
+!/.vscode/launch.json
+!/.vscode/tasks.json
+
+
+# Visual Studio / other
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-*.tsbuildinfo
-
-.eslintcache
-
+# ======================
 # Cypress
+# ======================
 /cypress/videos/
 /cypress/screenshots/
 
+# ======================
 # Vitest
+# ======================
 __screenshots__/
