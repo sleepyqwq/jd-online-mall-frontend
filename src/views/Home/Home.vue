@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { getCategoryTree, getProductList } from '@/api/product'
 import { getHomeBannerList } from '@/api/banner'
 import { ArrowRight } from '@element-plus/icons-vue'
+// 1. 引入组件
+import ProductCard from '@/components/ProductCard.vue'
 
 const router = useRouter()
 const categoryTree = ref([])
@@ -55,9 +57,7 @@ const handleCategoryClick = (categoryId) => {
     router.push({ path: '/products', query: { categoryId } })
 }
 
-const goToDetail = (id) => {
-    router.push(`/products/${id}`)
-}
+// 注意：goToDetail 方法现在移到了组件内部处理，这里可以删除了，或者留着不调用
 
 const handleBannerClick = (item) => {
     if (item.redirectUrl) {
@@ -74,10 +74,8 @@ const handleBannerClick = (item) => {
     <div class="home-container container">
 
         <div class="hero-section">
-
             <div class="category-sidebar">
                 <div class="sidebar-header">主题频道</div>
-
                 <ul class="cat-list" @mouseleave="handleMouseLeave">
                     <div class="hover-slider" :style="{
                         transform: `translateY(${sliderTop}px)`,
@@ -92,7 +90,6 @@ const handleBannerClick = (item) => {
                                 <ArrowRight />
                             </el-icon>
                         </div>
-
                         <div class="sub-cat-popover" v-if="cat.children && cat.children.length > 0">
                             <div class="popover-content">
                                 <div v-for="sub in cat.children" :key="sub.id" class="sub-item-card"
@@ -117,7 +114,6 @@ const handleBannerClick = (item) => {
                     </el-carousel-item>
                 </el-carousel>
             </div>
-
         </div>
 
         <div class="recommend-section">
@@ -128,18 +124,8 @@ const handleBannerClick = (item) => {
 
             <div class="product-grid" v-loading="loading">
                 <el-empty v-if="hotProducts.length === 0" description="暂无热门商品" />
-                <div v-for="prod in hotProducts" :key="prod.id" class="product-card" @click="goToDetail(prod.id)">
-                    <div class="img-wrapper">
-                        <img :src="prod.mainImage || ''" loading="lazy" alt="商品图片" class="prod-img">
-                    </div>
-                    <div class="prod-info">
-                        <div class="price-row">
-                            <span class="currency">¥</span>
-                            <span class="amount">{{ prod.price }}</span>
-                        </div>
-                        <div class="title" :title="prod.title">{{ prod.title }}</div>
-                    </div>
-                </div>
+
+                <ProductCard v-for="prod in hotProducts" :key="prod.id" :product="prod" />
             </div>
         </div>
     </div>
@@ -156,11 +142,10 @@ const handleBannerClick = (item) => {
     display: flex;
     margin-bottom: 40px;
     gap: 20px;
-    /* 侧边栏和轮播图之间的间距 */
     overflow: visible;
 }
 
-/* --- 侧边栏 (左侧独立卡片) --- */
+/* ... Sidebar 和 Banner 的 CSS 保持不变，省略 ... */
 .category-sidebar {
     width: 240px;
     height: 440px;
@@ -170,9 +155,7 @@ const handleBannerClick = (item) => {
     display: flex;
     flex-direction: column;
     border-radius: 12px;
-    /* 初始阴影 */
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-    /* 侧边栏整体交互：鼠标移上去微微上浮，增加立体感 */
     transition: all 0.3s ease;
     border: 1px solid #f0f0f0;
 }
@@ -203,7 +186,6 @@ const handleBannerClick = (item) => {
     position: relative;
 }
 
-/* 滑动高亮块 */
 .hover-slider {
     position: absolute;
     left: 0;
@@ -251,32 +233,23 @@ const handleBannerClick = (item) => {
     color: var(--primary-color);
 }
 
-/* --- 弹窗样式 (向右弹出) --- */
 .sub-cat-popover {
     opacity: 0;
     visibility: hidden;
     transform: translateX(-10px);
-    /* 初始位置略微偏左，营造向右滑出的感觉 */
-
     position: absolute;
     left: 240px;
-    /* 紧贴侧边栏右侧 */
     top: 0;
     width: 500px;
     height: 440px;
     background: #fff;
     border-radius: 8px;
     box-shadow: 8px 0 20px rgba(0, 0, 0, 0.08);
-    /* 阴影向右 */
     z-index: 200;
     padding: 20px;
     box-sizing: border-box;
     border-left: 1px solid #f0f0f0;
-
-    transition:
-        opacity 0.2s ease,
-        transform 0.2s ease,
-        visibility 0.2s;
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
 }
 
 .cat-item:hover .sub-cat-popover {
@@ -307,10 +280,8 @@ const handleBannerClick = (item) => {
     background-color: #fff0f0;
 }
 
-/* --- 轮播区域 (右侧独立卡片) --- */
 .banner-area {
     flex: 1;
-    /* 占据剩余宽度 */
     height: 440px;
     border-radius: 12px;
     overflow: hidden;
@@ -330,7 +301,6 @@ const handleBannerClick = (item) => {
     display: block;
 }
 
-/* 指示器与箭头样式 (保留之前的美化) */
 .banner-area :deep(.el-carousel__indicators) {
     bottom: 20px;
 }
@@ -379,7 +349,7 @@ const handleBannerClick = (item) => {
     color: #999;
 }
 
-/* 推荐板块 */
+
 .recommend-section {
     margin-top: 40px;
 }
@@ -402,79 +372,14 @@ const handleBannerClick = (item) => {
     color: #999;
 }
 
+/* 3. 修改 Grid 布局 
+   这里我们保持 4 列布局，Grid 会自动控制 ProductCard 的宽度
+*/
 .product-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 20px;
 }
 
-.product-card {
-    background: #fff;
-    border-radius: 8px;
-    padding: 12px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    border: 1px solid transparent;
-}
-
-.product-card:hover {
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-    transform: translateY(-4px);
-    border-color: #f0f0f0;
-}
-
-.img-wrapper {
-    width: 100%;
-    height: 200px;
-    background: #f8f8f8;
-    border-radius: 6px;
-    overflow: hidden;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.prod-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.5s;
-}
-
-.product-card:hover .prod-img {
-    transform: scale(1.05);
-}
-
-.prod-info {
-    padding: 0 4px;
-}
-
-.price-row {
-    color: #e4393c;
-    margin-bottom: 6px;
-    display: flex;
-    align-items: baseline;
-}
-
-.currency {
-    font-size: 14px;
-    margin-right: 2px;
-}
-
-.amount {
-    font-size: 20px;
-    font-weight: bold;
-}
-
-.title {
-    font-size: 14px;
-    color: #333;
-    line-height: 1.4;
-    height: 40px;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-}
+/* 已移除之前的 .product-card 样式，完全由组件内部控制 */
 </style>

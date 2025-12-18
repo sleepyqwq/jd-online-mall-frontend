@@ -2,6 +2,8 @@
 import { ref, reactive, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getProductList } from '@/api/product'
+import { Top, Bottom } from '@element-plus/icons-vue' // 补上可能缺失的图标引入
+import ProductCard from '@/components/ProductCard.vue' // 引入组件
 
 const route = useRoute()
 const router = useRouter()
@@ -16,20 +18,19 @@ const queryParams = reactive({
     pageSize: 20,
     keyword: route.query.keyword || '',
     categoryId: route.query.categoryId || '',
-    sortField: '', // price, createTime
-    sortOrder: '' // asc, desc
+    sortField: '',
+    sortOrder: ''
 })
 
 // 加载数据
 const loadData = async () => {
     loading.value = true
     try {
-        // 【关键修正】构造干净的请求参数，剔除空字符串，防止后端 Long 类型解析失败
         const params = {
             pageNum: queryParams.pageNum,
             pageSize: queryParams.pageSize,
             keyword: queryParams.keyword || undefined,
-            categoryId: queryParams.categoryId || undefined, // 空串转 undefined
+            categoryId: queryParams.categoryId || undefined,
             sortField: queryParams.sortField || undefined,
             sortOrder: queryParams.sortOrder || undefined
         }
@@ -44,18 +45,17 @@ const loadData = async () => {
     }
 }
 
-// 监听路由参数变化（如搜索词变化）
+// 监听路由参数变化
 watch(
     () => route.query,
     (newQuery) => {
         queryParams.keyword = newQuery.keyword || ''
         queryParams.categoryId = newQuery.categoryId || ''
-        queryParams.pageNum = 1 // 重置页码
+        queryParams.pageNum = 1
         loadData()
     }
 )
 
-// 排序处理优化
 const handleSort = (field) => {
     if (queryParams.sortField === field) {
         if (queryParams.sortOrder === 'asc') {
@@ -72,16 +72,10 @@ const handleSort = (field) => {
     loadData()
 }
 
-// 分页处理
 const handleCurrentChange = (val) => {
     queryParams.pageNum = val
     loadData()
     window.scrollTo(0, 0)
-}
-
-// 跳转详情
-const goToDetail = (id) => {
-    router.push(`/products/${id}`)
 }
 
 onMounted(() => {
@@ -121,20 +115,7 @@ onMounted(() => {
         <div class="product-grid" v-loading="loading">
             <el-empty v-if="!loading && productList.length === 0" description="暂无相关商品" />
 
-            <div v-for="prod in productList" :key="prod.id" class="product-item" @click="goToDetail(prod.id)">
-                <div class="img-box">
-                    <img :src="prod.mainImage || ''" alt="Product">
-                </div>
-                <div class="p-price">
-                    ¥ <strong>{{ prod.price }}</strong>
-                </div>
-                <div class="p-title" :title="prod.title">
-                    <span v-html="prod.title"></span>
-                </div>
-                <div class="p-commit">
-                    库存: {{ prod.stock }}
-                </div>
-            </div>
+            <ProductCard v-for="prod in productList" :key="prod.id" :product="prod" />
         </div>
 
         <div class="pagination-box" v-if="total > 0">
@@ -184,63 +165,15 @@ onMounted(() => {
     border-color: var(--el-color-primary);
 }
 
+/* 优化：使用 Grid 布局替代原来的 Flex 布局
+   minmax(220px, 1fr) 表示每列最小 220px，然后自动填满剩余空间，
+   这样在不同屏幕宽度下都能整齐排列。
+*/
 .product-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
     min-height: 300px;
-}
-
-.product-item {
-    width: 228px;
-    background: #fff;
-    border: 1px solid #eee;
-    padding: 10px;
-    cursor: pointer;
-    transition: box-shadow 0.2s;
-}
-
-.product-item:hover {
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
-
-.img-box {
-    width: 100%;
-    height: 220px;
-    background: #f8f8f8;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 10px;
-}
-
-.img-box img {
-    max-width: 100%;
-    max-height: 100%;
-}
-
-.p-price {
-    color: #e4393c;
-    font-size: 16px;
-    margin-bottom: 5px;
-}
-
-.p-price strong {
-    font-size: 20px;
-}
-
-.p-title {
-    height: 40px;
-    overflow: hidden;
-    font-size: 12px;
-    line-height: 20px;
-    color: #666;
-    margin-bottom: 5px;
-}
-
-.p-commit {
-    color: #a7a7a7;
-    font-size: 12px;
 }
 
 .pagination-box {

@@ -482,4 +482,66 @@ onMounted(() => {
     border: 2px solid #fff;
     box-sizing: content-box;
 }
+
+/* --- 动画关键帧定义 --- */
+
+/* 1. 购物车动画：模拟小车行进时的轻微晃动 */
+@keyframes cart-wobble {
+    0% {
+        transform: translateX(0) rotate(0);
+    }
+
+    25% {
+        transform: translateX(-2px) rotate(-6deg);
+    }
+
+    50% {
+        transform: translateX(2px) rotate(6deg);
+    }
+
+    75% {
+        transform: translateX(-1px) rotate(-3deg);
+    }
+
+    100% {
+        transform: translateX(0) rotate(0);
+    }
+}
+
+/* 2. 订单/清单动画：模拟纸张或图标轻微的Q弹放大 */
+@keyframes list-pop {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* --- 应用动画到具体图标 --- */
+
+/* 针对“我的订单”图标：鼠标悬停时，图标变红并Q弹一下 */
+.action-item:hover .icon-box .el-icon {
+    color: #e4393c;
+    /* 变京东红 */
+    animation: list-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* 针对“购物车”图标：鼠标悬停时，图标变红并晃动 */
+.cart-action:hover .cart-icon-wrapper .el-icon {
+    color: #e4393c;
+    /* 变京东红 */
+    animation: cart-wobble 0.5s ease-in-out;
+}
+
+/* 额外优化：为了让颜色变化更丝滑，建议给原图标类添加过渡属性 (可选) */
+.icon-box .el-icon,
+.cart-icon-wrapper .el-icon {
+    transition: color 0.2s;
+}
 </style>
