@@ -8,7 +8,6 @@ import { ElMessage } from 'element-plus'
 import { useCartStore } from '@/stores/cartStore'
 
 const cartStore = useCartStore()
-
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
@@ -16,23 +15,12 @@ const userStore = useUserStore()
 const product = ref({})
 const loading = ref(true)
 const buyCount = ref(1)
-// 当前展示的大图
-const currentImage = ref('')
 
-// 获取商品详情
 const loadDetail = async () => {
     const id = route.params.id
     try {
         const res = await getProductDetail(id)
         product.value = res
-        // 默认显示主图
-        if (res.mainImage) {
-            currentImage.value = res.mainImage
-        } else if (res.images && res.images.length > 0) {
-            currentImage.value = res.images[0]
-        } else {
-            currentImage.value = ''
-        }
     } catch (error) {
         console.error(error)
         ElMessage.error('获取商品详情失败')
@@ -41,19 +29,12 @@ const loadDetail = async () => {
     }
 }
 
-// 切换图片
-const handleImageEnter = (img) => {
-    currentImage.value = img
-}
-
-// 加入购物车
 const handleAddToCart = async () => {
     if (!userStore.token) {
         ElMessage.warning('请先登录')
         router.push(`/login?redirect=${route.fullPath}`)
         return
     }
-
     try {
         await addToCart({
             productId: product.value.id,
@@ -61,20 +42,17 @@ const handleAddToCart = async () => {
         })
         await cartStore.fetchCart()
         ElMessage.success('加入购物车成功')
-        // 可选：弹窗询问去结算还是继续购物，这里简单处理
     } catch (error) {
         console.error(error)
     }
 }
 
-// 立即购买 (简化：加入购物车后跳转购物车)
 const handleBuyNow = async () => {
     if (!userStore.token) {
         ElMessage.warning('请先登录')
         router.push(`/login?redirect=${route.fullPath}`)
         return
     }
-
     try {
         await addToCart({
             productId: product.value.id,
@@ -95,49 +73,53 @@ onMounted(() => {
     <div class="container detail-page" v-if="!loading">
         <div class="product-intro">
             <div class="preview-wrap">
-                <div class="main-img-box">
-                    <img :src="currentImage" alt="Main" />
-                </div>
-                <div class="spec-list">
-                    <div class="spec-item" v-for="(img, index) in product.images" :key="index"
-                        :class="{ active: currentImage === img }" @mouseenter="handleImageEnter(img)">
-                        <img :src="img" alt="Thumbnail" />
-                    </div>
-                </div>
+                <el-carousel :interval="4000" type="card" height="380px" indicator-position="outside" trigger="click">
+                    <el-carousel-item v-for="(img, index) in product.images" :key="index" class="carousel-card">
+                        <div class="card-content">
+                            <div class="blur-background" :style="{ backgroundImage: `url(${img})` }"></div>
+                            <img :src="img" alt="Product Image" class="real-img" />
+                        </div>
+                    </el-carousel-item>
+                </el-carousel>
             </div>
 
             <div class="item-info">
-                <div class="sku-name">{{ product.title }}</div>
-                <div class="news" v-if="product.subTitle">{{ product.subTitle }}</div>
+                <div class="info-header">
+                    <h1 class="sku-name">{{ product.title }}</h1>
+                    <p class="news" v-if="product.subTitle">{{ product.subTitle }}</p>
+                </div>
 
                 <div class="summary">
                     <div class="summary-price-wrap">
-                        <div class="dt">价　格</div>
-                        <div class="dd">
-                            <span class="p-price">¥ {{ product.price }}</span>
-                        </div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="dt">库　存</div>
-                        <div class="dd">{{ product.stock }} 件</div>
+                        <span class="currency">¥</span>
+                        <span class="p-price">{{ product.price }}</span>
                     </div>
                 </div>
 
                 <div class="choose-btns">
+                    <div class="choose-label">数量</div>
                     <div class="choose-amount">
-                        <el-input-number v-model="buyCount" :min="1" :max="product.stock" />
+                        <el-input-number v-model="buyCount" :min="1" :max="product.stock" size="large" />
                     </div>
-                    <div class="btns">
-                        <el-button type="warning" size="large" @click="handleAddToCart">加入购物车</el-button>
-                        <el-button type="danger" size="large" @click="handleBuyNow">立即购买</el-button>
-                    </div>
+                </div>
+
+                <div class="action-bar">
+                    <el-button type="warning" size="large" class="action-btn" @click="handleAddToCart">
+                        加入购物车
+                    </el-button>
+                    <el-button type="danger" size="large" class="action-btn" @click="handleBuyNow">
+                        立即购买
+                    </el-button>
                 </div>
             </div>
         </div>
 
         <div class="detail-content">
-            <div class="tab-header">商品介绍</div>
-            <div class="tab-content" v-html="product.description || '暂无详细介绍'"></div>
+            <div class="section-header">
+                <span class="title">商品介绍</span>
+            </div>
+            <div class="tab-content" v-html="product.description || '<p style=\'color:#999;padding:20px\'>暂无详细介绍</p>'">
+            </div>
         </div>
     </div>
 
@@ -148,132 +130,188 @@ onMounted(() => {
 
 <style scoped>
 .detail-page {
-    padding: 20px 0;
     background: #fff;
     margin-top: 20px;
+    margin-bottom: 40px;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
 .product-intro {
     display: flex;
-    gap: 30px;
-    padding-bottom: 30px;
-    border-bottom: 1px solid #eee;
+    gap: 50px;
+    padding-bottom: 40px;
 }
 
 .preview-wrap {
-    width: 400px;
+    width: 450px;
+    flex-shrink: 0;
 }
 
-.main-img-box {
-    width: 400px;
-    height: 400px;
-    border: 1px solid #eee;
-    margin-bottom: 10px;
+/* --- 3D 轮播图样式优化 --- */
+.card-content {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    background: #f8f8f8;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+
+    /* 默认给所有卡片加上过渡动画 */
+    transition: all 0.4s ease;
 }
 
-.main-img-box img {
-    max-width: 100%;
-    max-height: 100%;
+/* 核心修改：给【非当前激活】的卡片添加模糊和变暗效果 */
+.el-carousel__item:not(.is-active) .card-content {
+    /* 模糊 4px */
+    filter: blur(4px) brightness(0.9);
+    /* 也可以尝试 opacity: 0.8; */
 }
 
-.spec-list {
-    display: flex;
-    gap: 10px;
-    overflow-x: auto;
+/* 当前激活的卡片：清晰、明亮、有阴影 */
+.el-carousel__item.is-active .card-content {
+    filter: blur(0) brightness(1);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    border-color: transparent;
 }
 
-.spec-item {
-    width: 60px;
-    height: 60px;
-    border: 2px solid transparent;
-    cursor: pointer;
-}
-
-.spec-item.active {
-    border-color: #e4393c;
-}
-
-.spec-item img {
+/* 毛玻璃背景层 */
+.blur-background {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
+    background-size: cover;
+    background-position: center;
+    filter: blur(20px) opacity(0.5);
+    transform: scale(1.2);
+    z-index: 1;
 }
 
+.real-img {
+    position: relative;
+    z-index: 2;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* 右侧信息区 */
 .item-info {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.info-header {
+    margin-bottom: 20px;
 }
 
 .sku-name {
-    font-size: 16px;
-    font-weight: 700;
-    color: #666;
-    margin-bottom: 10px;
+    font-size: 24px;
+    font-weight: 600;
+    color: #333;
+    line-height: 1.4;
+    margin-bottom: 12px;
 }
 
 .news {
     color: #e4393c;
-    margin-bottom: 10px;
-    font-size: 12px;
+    font-size: 14px;
+    line-height: 1.5;
 }
 
 .summary {
-    background: #f3f3f3;
-    padding: 10px;
-    margin-bottom: 20px;
+    padding: 20px 0;
+    border-top: 1px dashed #e0e0e0;
+    border-bottom: 1px dashed #e0e0e0;
+    margin-bottom: 30px;
 }
 
 .summary-price-wrap {
     display: flex;
-    align-items: center;
-    margin-bottom: 10px;
+    align-items: baseline;
+    color: #e4393c;
 }
 
-.summary-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 5px;
-    color: #999;
-    font-size: 12px;
-}
-
-.dt {
-    width: 60px;
-    padding-left: 10px;
-    font-family: simsun;
+.currency {
+    font-size: 18px;
+    margin-right: 4px;
+    font-weight: 600;
 }
 
 .p-price {
-    color: #e4393c;
-    font-size: 24px;
+    font-size: 32px;
     font-weight: 700;
+    font-family: Arial, sans-serif;
 }
 
 .choose-btns {
-    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 30px;
+}
+
+.choose-label {
+    font-size: 14px;
+    color: #666;
+}
+
+.action-bar {
     display: flex;
     gap: 20px;
-    align-items: center;
+    margin-top: auto;
+}
+
+.action-btn {
+    width: 160px;
+    font-weight: 600;
+    border-radius: 4px;
 }
 
 .detail-content {
-    margin-top: 30px;
-    padding: 0 20px;
+    margin-top: 20px;
 }
 
-.tab-header {
-    background: #f7f7f7;
-    border: 1px solid #eee;
-    padding: 10px 20px;
-    font-size: 14px;
+.section-header {
+    border-bottom: 1px solid #eee;
+    margin-bottom: 30px;
+    display: flex;
+}
+
+.section-header .title {
+    font-size: 16px;
     font-weight: 700;
-    margin-bottom: 20px;
+    color: #333;
+    padding: 12px 0;
+    border-bottom: 3px solid #e4393c;
+    margin-bottom: -1px;
+}
+
+.tab-content {
+    line-height: 1.6;
+    color: #666;
+    white-space: pre-wrap;
+    font-size: 14px;
+}
+
+:deep(.tab-content img) {
+    max-width: 100%;
+    display: block;
+    margin: 0 auto;
 }
 
 .loading-state {
-    padding: 20px;
+    padding: 40px;
     background: #fff;
     margin-top: 20px;
+    border-radius: 8px;
 }
 </style>

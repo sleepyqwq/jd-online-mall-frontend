@@ -1,17 +1,56 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCategoryTree, getProductList } from '@/api/product'
-import { getHomeBannerList } from '@/api/banner'
-import { ArrowRight } from '@element-plus/icons-vue'
-// 1. 引入组件
+import { ArrowRight, DArrowRight } from '@element-plus/icons-vue'
 import ProductCard from '@/components/ProductCard.vue'
+import Banner3D from './components/3DBanner.vue'
 
 const router = useRouter()
 const categoryTree = ref([])
-const hotProducts = ref([])
-const bannerList = ref([])
+const allHotProducts = ref([])
 const loading = ref(true)
+
+// --- 渐进式显示逻辑 ---
+const visibleCount = ref(8)
+const sentinelRef = ref(null)
+let dataObserver = null
+
+const visibleProducts = computed(() => {
+    return allHotProducts.value.slice(0, visibleCount.value)
+})
+
+const isFullLoaded = computed(() => {
+    return visibleCount.value >= allHotProducts.value.length && allHotProducts.value.length > 0
+})
+
+// --- [核心修改] 动画指令 v-slide-in ---
+const vSlideIn = {
+    mounted: (el) => {
+        // 1. 初始状态：强制隐藏
+        el.classList.add('slide-in-item') // 添加一个基础类，用于写 transition
+        el.classList.remove('slide-in-active') // 确保初始没有激活
+
+        const animationObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // 进入屏幕：添加激活类 -> 浮现
+                    el.classList.add('slide-in-active')
+                } else {
+                    // [关键点] 离开屏幕：移除激活类 -> 变回透明下沉状态
+                    // 这样下次进入时，又会重新触发动画
+                    el.classList.remove('slide-in-active')
+                }
+            })
+        }, {
+            threshold: 0.1, // 露出 10% 触发
+            rootMargin: '0px 0px -50px 0px'
+        })
+
+        animationObserver.observe(el)
+        // 注意：这里删除了 unobserve，让它一直保持监控
+    }
+}
 
 // --- 滑块动画逻辑 ---
 const sliderTop = ref(0)
@@ -28,23 +67,38 @@ const handleMouseLeave = () => {
     showSlider.value = false
 }
 
+// --- 数据预加载观察者 ---
+const setupDataObserver = () => {
+    dataObserver = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && visibleCount.value < allHotProducts.value.length) {
+            visibleCount.value += 8
+        }
+    }, {
+        rootMargin: '0px 0px 600px 0px',
+        threshold: 0
+    })
+
+    if (sentinelRef.value) {
+        dataObserver.observe(sentinelRef.value)
+    }
+}
+
 // 初始化数据
 onMounted(async () => {
     try {
-        const [cateRes, bannerRes, prodRes] = await Promise.allSettled([
+        const [cateRes, prodRes] = await Promise.allSettled([
             getCategoryTree(),
-            getHomeBannerList(),
-            getProductList({ pageNum: 1, pageSize: 8 })
+            getProductList({ pageNum: 1, pageSize: 24 })
         ])
 
         if (cateRes.status === 'fulfilled') {
             categoryTree.value = cateRes.value || []
         }
-        if (bannerRes.status === 'fulfilled') {
-            bannerList.value = bannerRes.value || []
-        }
         if (prodRes.status === 'fulfilled') {
-            hotProducts.value = prodRes.value.list || []
+            allHotProducts.value = prodRes.value.list || []
+            nextTick(() => {
+                setupDataObserver()
+            })
         }
     } catch (error) {
         console.error(error)
@@ -53,20 +107,16 @@ onMounted(async () => {
     }
 })
 
+onUnmounted(() => {
+    if (dataObserver) dataObserver.disconnect()
+})
+
 const handleCategoryClick = (categoryId) => {
     router.push({ path: '/products', query: { categoryId } })
 }
 
-// 注意：goToDetail 方法现在移到了组件内部处理，这里可以删除了，或者留着不调用
-
-const handleBannerClick = (item) => {
-    if (item.redirectUrl) {
-        if (item.redirectUrl.startsWith('/')) {
-            router.push(item.redirectUrl)
-        } else {
-            window.open(item.redirectUrl, '_blank')
-        }
-    }
+const goToProductList = () => {
+    router.push('/products')
 }
 </script>
 
@@ -102,17 +152,8 @@ const handleBannerClick = (item) => {
                 </ul>
             </div>
 
-            <div class="banner-area">
-                <el-carousel height="440px" :interval="5000" arrow="hover">
-                    <el-carousel-item v-for="item in bannerList" :key="item.id">
-                        <img :src="item.imgUrl" class="banner-img" @click="handleBannerClick(item)" />
-                    </el-carousel-item>
-                    <el-carousel-item v-if="bannerList.length === 0">
-                        <div class="banner-placeholder">
-                            <h3>暂无精彩活动</h3>
-                        </div>
-                    </el-carousel-item>
-                </el-carousel>
+            <div class="right-banner-wrapper">
+                <Banner3D />
             </div>
         </div>
 
@@ -122,22 +163,59 @@ const handleBannerClick = (item) => {
                 <span class="title-sub">品质生活，精选好物</span>
             </div>
 
-            <div class="product-grid" v-loading="loading">
-                <el-empty v-if="hotProducts.length === 0" description="暂无热门商品" />
+            <div class="product-grid" v-if="!loading">
+                <el-empty v-if="allHotProducts.length === 0" description="暂无热门商品" />
 
-                <ProductCard v-for="prod in hotProducts" :key="prod.id" :product="prod" />
+                <ProductCard v-for="prod in visibleProducts" :key="prod.id" :product="prod" v-slide-in />
+            </div>
+
+            <div v-else class="loading-skeleton">
+                <el-skeleton :rows="3" animated />
+            </div>
+
+            <div class="bottom-action-area">
+                <div ref="sentinelRef" class="scroll-sentinel" v-if="!isFullLoaded && !loading"
+                    style="height: 20px; opacity: 0;"></div>
+
+                <div class="view-all-wrapper" v-if="isFullLoaded">
+                    <button class="view-all-btn" @click="goToProductList">
+                        浏览全部商品
+                        <el-icon class="icon">
+                            <DArrowRight />
+                        </el-icon>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <style scoped>
+/* --- 动画样式修改 --- */
+
+/* 1. 基础状态：所有卡片都必须有过渡属性，否则消失时会很生硬 */
+:global(.slide-in-item) {
+    opacity: 0;
+    transform: translateY(40px) scale(0.95);
+    /* 稍微缩小一点，增加呼吸感 */
+    transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* 这里把 transition 放在基础类上 
+       是为了保证“进入”和“离开”都有平滑动画
+    */
+}
+
+/* 2. 激活状态：回到原位 */
+:global(.slide-in-active) {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+/* --- 其他原有样式 --- */
 .home-container {
     padding-top: 20px;
     padding-bottom: 60px;
 }
 
-/* --- Hero Section (保持分离布局) --- */
 .hero-section {
     display: flex;
     margin-bottom: 40px;
@@ -145,7 +223,16 @@ const handleBannerClick = (item) => {
     overflow: visible;
 }
 
-/* ... Sidebar 和 Banner 的 CSS 保持不变，省略 ... */
+.right-banner-wrapper {
+    flex: 1;
+    height: 440px;
+    border-radius: 12px;
+    background-color: #f5f7fa;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+}
+
 .category-sidebar {
     width: 240px;
     height: 440px;
@@ -280,76 +367,6 @@ const handleBannerClick = (item) => {
     background-color: #fff0f0;
 }
 
-.banner-area {
-    flex: 1;
-    height: 440px;
-    border-radius: 12px;
-    overflow: hidden;
-    position: relative;
-    background-color: #f0f2f5;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-}
-
-.banner-area:hover {
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
-}
-
-.banner-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
-
-.banner-area :deep(.el-carousel__indicators) {
-    bottom: 20px;
-}
-
-.banner-area :deep(.el-carousel__indicator) {
-    padding: 12px 6px;
-}
-
-.banner-area :deep(.el-carousel__button) {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: rgba(255, 255, 255, 0.4);
-    border: none;
-    opacity: 1;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.banner-area :deep(.el-carousel__indicator.is-active .el-carousel__button) {
-    width: 24px;
-    border-radius: 4px;
-    background-color: #fff;
-}
-
-.banner-area :deep(.el-carousel__arrow) {
-    width: 48px;
-    height: 48px;
-    font-size: 20px;
-    background-color: rgba(0, 0, 0, 0.2);
-    color: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(4px);
-    transition: all 0.3s ease;
-}
-
-.banner-area :deep(.el-carousel__arrow:hover) {
-    background-color: rgba(0, 0, 0, 0.5);
-    transform: scale(1.1);
-}
-
-.banner-placeholder {
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: #999;
-}
-
-
 .recommend-section {
     margin-top: 40px;
 }
@@ -372,14 +389,65 @@ const handleBannerClick = (item) => {
     color: #999;
 }
 
-/* 3. 修改 Grid 布局 
-   这里我们保持 4 列布局，Grid 会自动控制 ProductCard 的宽度
-*/
 .product-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 20px;
+    min-height: 300px;
 }
 
-/* 已移除之前的 .product-card 样式，完全由组件内部控制 */
+.bottom-action-area {
+    margin-top: 20px;
+    height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.view-all-wrapper {
+    animation: fadeInUp 0.5s ease;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.view-all-btn {
+    background: #fff;
+    color: #333;
+    border: 1px solid #e0e0e0;
+    padding: 12px 36px;
+    border-radius: 50px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.view-all-btn:hover {
+    background: #e4393c;
+    color: #fff;
+    border-color: #e4393c;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(228, 57, 60, 0.25);
+}
+
+.view-all-btn .icon {
+    transition: transform 0.3s;
+}
+
+.view-all-btn:hover .icon {
+    transform: translateX(4px);
+}
 </style>
