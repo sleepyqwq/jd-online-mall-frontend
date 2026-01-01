@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, onUnmounted } from 'vue'
+import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCategoryTree, getProductList } from '@/api/product'
 import { ArrowRight, DArrowRight } from '@element-plus/icons-vue'
@@ -22,7 +22,6 @@ const handleMouseEnter = (e) => {
 const handleMouseLeave = () => sliderStyle.value = { ...sliderStyle.value, opacity: 0 }
 
 // --- 2. 优化后的指令 (单例模式，性能提升 N 倍) ---
-const observerMap = new WeakMap() // 用于存储元素与回调的关系(可选，这里直接操作类名无需回调)
 const sharedObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         // Toggle class based on intersection
@@ -44,17 +43,48 @@ const visibleCount = ref(8)
 const visibleProducts = computed(() => allProducts.value.slice(0, visibleCount.value))
 const isFullLoaded = computed(() => visibleCount.value >= allProducts.value.length)
 
-// 数据加载哨兵 (复用上面的 observer 逻辑太复杂，不如单独开一个简单的)
-const setupSentinel = (el) => {
-    if (!el) return
-    const sentinelObserver = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && !isFullLoaded.value) {
-            visibleCount.value += 8
-        }
-    })
-    sentinelObserver.observe(el)
-    onUnmounted(() => sentinelObserver.disconnect())
+// 【修复部分开始】：使用 ref + watch 替代原来的函数式 ref，解决生命周期报错
+const sentinelRef = ref(null) // 1. 定义 DOM 引用
+let sentinelObserver = null   // 2. 定义 observer 实例变量
+
+// 初始化观察器的函数
+const initSentinelObserver = () => {
+    // 如果已存在，先清理
+    if (sentinelObserver) {
+        sentinelObserver.disconnect()
+        sentinelObserver = null
+    }
+
+    // 如果 DOM 元素存在且数据未加载完，创建新的观察器
+    if (sentinelRef.value && !isFullLoaded.value) {
+        sentinelObserver = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && !isFullLoaded.value) {
+                visibleCount.value += 8
+            }
+        })
+        sentinelObserver.observe(sentinelRef.value)
+    }
 }
+
+// 监听 sentinelRef 的变化（当 v-if 导致元素渲染时触发）
+watch(sentinelRef, () => {
+    initSentinelObserver()
+})
+
+// 监听 isFullLoaded，如果加载完毕，销毁观察器
+watch(isFullLoaded, (val) => {
+    if (val && sentinelObserver) {
+        sentinelObserver.disconnect()
+    }
+})
+
+// 在 setup 顶层注册销毁钩子，确保安全
+onUnmounted(() => {
+    if (sentinelObserver) {
+        sentinelObserver.disconnect()
+    }
+})
+// 【修复部分结束】
 
 // --- 4. 初始化 ---
 onMounted(async () => {
@@ -122,7 +152,7 @@ const navTo = (query = {}) => router.push({ path: '/products', query })
             <div v-else class="loading-skeleton"><el-skeleton :rows="3" animated /></div>
 
             <div class="bottom-action-area">
-                <div :ref="setupSentinel" class="scroll-sentinel" v-if="!isFullLoaded && !loading"></div>
+                <div ref="sentinelRef" class="scroll-sentinel" v-if="!isFullLoaded && !loading"></div>
 
                 <div class="view-all-wrapper" v-if="isFullLoaded">
                     <button class="view-all-btn" @click="navTo()">

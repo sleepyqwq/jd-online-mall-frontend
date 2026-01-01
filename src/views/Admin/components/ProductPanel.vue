@@ -264,7 +264,7 @@ onActivated(() => { loadCategories(); loadList() })
 </template>
 
 <style scoped>
-/* 核心容器：磨砂玻璃风格 (已去重) */
+/* 磨砂玻璃风格 */
 .panel-card {
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(20px);
