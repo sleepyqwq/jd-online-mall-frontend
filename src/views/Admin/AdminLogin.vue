@@ -1,49 +1,48 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-// 【关键修改 1】引入 adminStore 而不是 userStore
 import { useAdminStore } from '@/stores/adminStore'
 import { adminLogin } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Right } from '@element-plus/icons-vue'
 
 const router = useRouter()
-// 【关键修改 2】使用 adminStore 实例
 const adminStore = useAdminStore()
 const loading = ref(false)
+const formRef = ref()
 
-const form = reactive({
-    username: '',
-    password: ''
-})
+const form = reactive({ username: '', password: '' })
+
+// 1. 使用标准校验规则，替代手动 if 判断
+const rules = {
+    username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+    password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+}
 
 const handleLogin = async () => {
-    if (!form.username || !form.password) {
-        return ElMessage.warning('请输入账号和密码')
-    }
+    if (!formRef.value) return
 
-    loading.value = true
-    try {
-        const res = await adminLogin(form)
+    // 2. 调用 Element Plus 表单验证
+    await formRef.value.validate(async (valid) => {
+        if (!valid) return
 
-        // 双重校验角色
-        if (res.user.role !== 'ADMIN') {
-            ElMessage.error('该账号没有管理员权限')
-            return
+        loading.value = true
+        try {
+            const res = await adminLogin(form)
+
+            if (res.user.role !== 'ADMIN') {
+                return ElMessage.error('权限不足，仅限管理员登录')
+            }
+
+            adminStore.setLoginState(res.token, res.user)
+            ElMessage.success(`欢迎回来，${res.user.nickname || '管理员'}`)
+            router.push('/admin/dashboard')
+        } catch (e) {
+            console.error(e)
+        } finally {
+            loading.value = false
         }
-
-        // 【关键修改 3】将 Token 和用户信息存入 adminStore
-        // 这样 router 检查 adminStore 时就能读到 Token 了
-        adminStore.setLoginState(res.token, res.user)
-
-        ElMessage.success('欢迎回来，管理员')
-
-        router.push('/admin/dashboard')
-    } catch (error) {
-        console.error(error)
-    } finally {
-        loading.value = false
-    }
+    })
 }
 </script>
 
@@ -56,25 +55,22 @@ const handleLogin = async () => {
         <div class="login-content">
             <div class="login-glass-card">
                 <div class="header">
-                    <div class="logo">
-                        <span class="logo-icon">JD</span>
-                    </div>
+                    <div class="logo"><span class="logo-icon">JD</span></div>
                     <h2 class="title">Admin Console</h2>
                     <p class="subtitle">京东商城 · 运营管理系统</p>
                 </div>
 
-                <el-form size="large" class="login-form">
-                    <el-form-item>
-                        <el-input v-model="form.username" placeholder="请输入管理员账号" :prefix-icon="User"
-                            class="custom-input" />
+                <el-form ref="formRef" :model="form" :rules="rules" size="large" class="login-form"
+                    @keyup.enter="handleLogin">
+                    <el-form-item prop="username">
+                        <el-input v-model="form.username" placeholder="管理员账号" :prefix-icon="User" class="glass-input" />
                     </el-form-item>
-                    <el-form-item>
-                        <el-input v-model="form.password" type="password" placeholder="请输入密码" :prefix-icon="Lock"
-                            show-password @keyup.enter="handleLogin" class="custom-input" />
+                    <el-form-item prop="password">
+                        <el-input v-model="form.password" type="password" placeholder="密码" :prefix-icon="Lock"
+                            show-password class="glass-input" />
                     </el-form-item>
                     <el-button type="primary" class="submit-btn" :loading="loading" @click="handleLogin" round>
-                        <span>立即登录</span>
-                        <el-icon class="el-icon--right">
+                        立即登录 <el-icon class="el-icon--right">
                             <Right />
                         </el-icon>
                     </el-button>
@@ -91,7 +87,7 @@ const handleLogin = async () => {
 </template>
 
 <style scoped>
-/* --- 容器与动态背景 --- */
+/* 容器与背景 */
 .login-container {
     min-height: 100vh;
     width: 100%;
@@ -100,12 +96,11 @@ const handleLogin = async () => {
     display: flex;
     justify-content: center;
     align-items: center;
-    /* 深色时尚渐变背景 */
     background: linear-gradient(135deg, #1a1c2c 0%, #4a192c 100%);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: sans-serif;
 }
 
-/* 漂浮的装饰球 - 营造氛围感 */
+/* 装饰球优化：提取公共属性 */
 .shape {
     position: absolute;
     border-radius: 50%;
@@ -153,7 +148,7 @@ const handleLogin = async () => {
     }
 }
 
-/* --- 毛玻璃卡片 --- */
+/* 毛玻璃卡片 */
 .login-content {
     position: relative;
     z-index: 1;
@@ -162,7 +157,6 @@ const handleLogin = async () => {
 .login-glass-card {
     width: 420px;
     padding: 50px 40px;
-    /* 毛玻璃核心代码 */
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -173,7 +167,7 @@ const handleLogin = async () => {
     text-align: center;
 }
 
-/* --- 头部区域 --- */
+/* 头部样式 */
 .header {
     margin-bottom: 40px;
 }
@@ -181,9 +175,9 @@ const handleLogin = async () => {
 .logo {
     width: 60px;
     height: 60px;
-    background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
-    border-radius: 12px;
     margin: 0 auto 20px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #00d2ff, #3a7bd5);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -193,7 +187,6 @@ const handleLogin = async () => {
 .logo-icon {
     font-size: 24px;
     font-weight: 900;
-    color: #fff;
     letter-spacing: -1px;
 }
 
@@ -211,13 +204,12 @@ const handleLogin = async () => {
     font-weight: 300;
 }
 
-/* --- 表单样式自定义 --- */
+/* 表单与输入框样式穿透 */
 .login-form {
     margin-top: 20px;
 }
 
-/* 深度选择器修改 Element Plus 输入框样式，使其透明 */
-:deep(.custom-input .el-input__wrapper) {
+:deep(.glass-input .el-input__wrapper) {
     background-color: rgba(0, 0, 0, 0.2) !important;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: none !important;
@@ -226,32 +218,30 @@ const handleLogin = async () => {
     transition: all 0.3s;
 }
 
-:deep(.custom-input .el-input__wrapper.is-focus) {
+:deep(.glass-input .el-input__wrapper.is-focus) {
     background-color: rgba(0, 0, 0, 0.3) !important;
     border-color: #00d2ff !important;
 }
 
-:deep(.custom-input .el-input__inner) {
+:deep(.glass-input .el-input__inner) {
     color: #fff !important;
     height: 48px;
 }
 
-/* 占位符颜色 */
-:deep(.custom-input .el-input__inner::placeholder) {
+:deep(.glass-input .el-input__inner::placeholder) {
     color: rgba(255, 255, 255, 0.4);
 }
 
-/* 图标颜色 */
-:deep(.custom-input .el-input__icon) {
+:deep(.glass-input .el-input__icon) {
     color: rgba(255, 255, 255, 0.6);
 }
 
-/* --- 按钮样式 --- */
+/* 按钮 */
 .submit-btn {
     width: 100%;
     height: 48px;
     margin-top: 10px;
-    background: linear-gradient(90deg, #00d2ff 0%, #3a7bd5 100%);
+    background: linear-gradient(90deg, #00d2ff, #3a7bd5);
     border: none;
     font-size: 16px;
     font-weight: 600;
@@ -263,14 +253,14 @@ const handleLogin = async () => {
 .submit-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 25px rgba(58, 123, 213, 0.5);
-    background: linear-gradient(90deg, #00c6f0 0%, #326ec2 100%);
+    background: linear-gradient(90deg, #00c6f0, #326ec2);
 }
 
 .submit-btn:active {
     transform: translateY(0);
 }
 
-/* --- 底部链接 --- */
+/* 底部 */
 .footer {
     margin-top: 30px;
 }
@@ -279,7 +269,7 @@ const handleLogin = async () => {
     color: rgba(255, 255, 255, 0.6);
     text-decoration: none;
     font-size: 13px;
-    transition: color 0.3s;
+    transition: 0.3s;
     display: inline-flex;
     align-items: center;
 }
@@ -288,12 +278,12 @@ const handleLogin = async () => {
     color: #fff;
 }
 
-.arrow {
-    margin-right: 5px;
-    transition: transform 0.3s;
-}
-
 .back-link:hover .arrow {
     transform: translateX(-3px);
+}
+
+.arrow {
+    margin-right: 5px;
+    transition: 0.3s;
 }
 </style>

@@ -5,6 +5,7 @@
     <footer class="app-footer">
         <div class="container">
             <div class="footer-links">
+                <a href="#">帮助中心</a> |
                 <a href="#">关于我们</a> |
                 <a href="#">联系我们</a> |
                 <a href="#">人才招聘</a> |
@@ -23,7 +24,6 @@
     background-color: #eaeaea;
     padding: 30px 0;
     margin-top: auto;
-    /* 保证 sticky footer 效果 */
     text-align: center;
     color: #666;
     font-size: 12px;

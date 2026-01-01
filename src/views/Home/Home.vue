@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue'
+import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCategoryTree, getProductList } from '@/api/product'
 import { ArrowRight, DArrowRight } from '@element-plus/icons-vue'
@@ -8,142 +8,95 @@ import Banner3D from './components/3DBanner.vue'
 
 const router = useRouter()
 const categoryTree = ref([])
-const allHotProducts = ref([])
+const allProducts = ref([])
 const loading = ref(true)
 
-// --- 渐进式显示逻辑 ---
-const visibleCount = ref(8)
-const sentinelRef = ref(null)
-let dataObserver = null
+// --- 1. 优化后的滑块逻辑 (移除魔术数字) ---
+const sliderStyle = ref({ opacity: 0, transform: 'translateY(0)' })
 
-const visibleProducts = computed(() => {
-    return allHotProducts.value.slice(0, visibleCount.value)
-})
+const handleMouseEnter = (e) => {
+    // 直接动态获取当前 li 的位置和高度，不再需要手动算 42 * index
+    const { offsetTop, offsetHeight } = e.currentTarget
+    sliderStyle.value = { opacity: 1, transform: `translateY(${offsetTop}px)`, height: `${offsetHeight}px` }
+}
+const handleMouseLeave = () => sliderStyle.value = { ...sliderStyle.value, opacity: 0 }
 
-const isFullLoaded = computed(() => {
-    return visibleCount.value >= allHotProducts.value.length && allHotProducts.value.length > 0
-})
+// --- 2. 优化后的指令 (单例模式，性能提升 N 倍) ---
+const observerMap = new WeakMap() // 用于存储元素与回调的关系(可选，这里直接操作类名无需回调)
+const sharedObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        // Toggle class based on intersection
+        entry.target.classList.toggle('slide-in-active', entry.isIntersecting)
+    })
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' })
 
-// --- [核心修改] 动画指令 v-slide-in ---
 const vSlideIn = {
     mounted: (el) => {
-        // 1. 初始状态：强制隐藏
-        el.classList.add('slide-in-item') // 添加一个基础类，用于写 transition
-        el.classList.remove('slide-in-active') // 确保初始没有激活
-
-        const animationObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    // 进入屏幕：添加激活类 -> 浮现
-                    el.classList.add('slide-in-active')
-                } else {
-                    // [关键点] 离开屏幕：移除激活类 -> 变回透明下沉状态
-                    // 这样下次进入时，又会重新触发动画
-                    el.classList.remove('slide-in-active')
-                }
-            })
-        }, {
-            threshold: 0.1, // 露出 10% 触发
-            rootMargin: '0px 0px -50px 0px'
-        })
-
-        animationObserver.observe(el)
-        // 注意：这里删除了 unobserve，让它一直保持监控
-    }
+        el.classList.add('slide-in-item')
+        sharedObserver.observe(el)
+    },
+    unmounted: (el) => sharedObserver.unobserve(el)
 }
 
-// --- 滑块动画逻辑 ---
-const sliderTop = ref(0)
-const showSlider = ref(false)
-const ITEM_HEIGHT = 42
-const LIST_PADDING_TOP = 10
+// --- 3. 瀑布流/无限加载逻辑 ---
+const visibleCount = ref(8)
+// 切割显示数据
+const visibleProducts = computed(() => allProducts.value.slice(0, visibleCount.value))
+const isFullLoaded = computed(() => visibleCount.value >= allProducts.value.length)
 
-const handleMouseEnter = (index) => {
-    sliderTop.value = index * ITEM_HEIGHT + LIST_PADDING_TOP
-    showSlider.value = true
-}
-
-const handleMouseLeave = () => {
-    showSlider.value = false
-}
-
-// --- 数据预加载观察者 ---
-const setupDataObserver = () => {
-    dataObserver = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && visibleCount.value < allHotProducts.value.length) {
+// 数据加载哨兵 (复用上面的 observer 逻辑太复杂，不如单独开一个简单的)
+const setupSentinel = (el) => {
+    if (!el) return
+    const sentinelObserver = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && !isFullLoaded.value) {
             visibleCount.value += 8
         }
-    }, {
-        rootMargin: '0px 0px 600px 0px',
-        threshold: 0
     })
-
-    if (sentinelRef.value) {
-        dataObserver.observe(sentinelRef.value)
-    }
+    sentinelObserver.observe(el)
+    onUnmounted(() => sentinelObserver.disconnect())
 }
 
-// 初始化数据
+// --- 4. 初始化 ---
 onMounted(async () => {
     try {
-        const [cateRes, prodRes] = await Promise.allSettled([
+        // 使用 Promise.all 代码更紧凑，catch 统一处理错误
+        const [cate, prod] = await Promise.all([
             getCategoryTree(),
             getProductList({ pageNum: 1, pageSize: 24 })
         ])
-
-        if (cateRes.status === 'fulfilled') {
-            categoryTree.value = cateRes.value || []
-        }
-        if (prodRes.status === 'fulfilled') {
-            allHotProducts.value = prodRes.value.list || []
-            nextTick(() => {
-                setupDataObserver()
-            })
-        }
-    } catch (error) {
-        console.error(error)
+        categoryTree.value = cate || []
+        allProducts.value = prod.list || []
+    } catch (e) {
+        console.error('Data Load Failed:', e)
     } finally {
         loading.value = false
     }
 })
 
-onUnmounted(() => {
-    if (dataObserver) dataObserver.disconnect()
-})
-
-const handleCategoryClick = (categoryId) => {
-    router.push({ path: '/products', query: { categoryId } })
-}
-
-const goToProductList = () => {
-    router.push('/products')
-}
+// 通用跳转
+const navTo = (query = {}) => router.push({ path: '/products', query })
 </script>
 
 <template>
     <div class="home-container container">
-
         <div class="hero-section">
             <div class="category-sidebar">
                 <div class="sidebar-header">主题频道</div>
                 <ul class="cat-list" @mouseleave="handleMouseLeave">
-                    <div class="hover-slider" :style="{
-                        transform: `translateY(${sliderTop}px)`,
-                        opacity: showSlider ? 1 : 0
-                    }"></div>
+                    <div class="hover-slider" :style="sliderStyle"></div>
 
-                    <li v-for="(cat, index) in categoryTree" :key="cat.id" class="cat-item"
-                        @mouseenter="handleMouseEnter(index)">
-                        <div class="cat-label" @click="handleCategoryClick(cat.id)">
+                    <li v-for="cat in categoryTree" :key="cat.id" class="cat-item" @mouseenter="handleMouseEnter"
+                        @click="navTo({ categoryId: cat.id })">
+                        <div class="cat-label">
                             <span class="label-text">{{ cat.name }}</span>
                             <el-icon class="arrow-icon">
                                 <ArrowRight />
                             </el-icon>
                         </div>
-                        <div class="sub-cat-popover" v-if="cat.children && cat.children.length > 0">
+                        <div class="sub-cat-popover" v-if="cat.children?.length">
                             <div class="popover-content">
                                 <div v-for="sub in cat.children" :key="sub.id" class="sub-item-card"
-                                    @click.stop="handleCategoryClick(sub.id)">
+                                    @click.stop="navTo({ categoryId: sub.id })">
                                     {{ sub.name }}
                                 </div>
                             </div>
@@ -151,7 +104,6 @@ const goToProductList = () => {
                     </li>
                 </ul>
             </div>
-
             <div class="right-banner-wrapper">
                 <Banner3D />
             </div>
@@ -164,23 +116,17 @@ const goToProductList = () => {
             </div>
 
             <div class="product-grid" v-if="!loading">
-                <el-empty v-if="allHotProducts.length === 0" description="暂无热门商品" />
-
+                <el-empty v-if="!allProducts.length" description="暂无商品" />
                 <ProductCard v-for="prod in visibleProducts" :key="prod.id" :product="prod" v-slide-in />
             </div>
-
-            <div v-else class="loading-skeleton">
-                <el-skeleton :rows="3" animated />
-            </div>
+            <div v-else class="loading-skeleton"><el-skeleton :rows="3" animated /></div>
 
             <div class="bottom-action-area">
-                <div ref="sentinelRef" class="scroll-sentinel" v-if="!isFullLoaded && !loading"
-                    style="height: 20px; opacity: 0;"></div>
+                <div :ref="setupSentinel" class="scroll-sentinel" v-if="!isFullLoaded && !loading"></div>
 
                 <div class="view-all-wrapper" v-if="isFullLoaded">
-                    <button class="view-all-btn" @click="goToProductList">
-                        浏览全部商品
-                        <el-icon class="icon">
+                    <button class="view-all-btn" @click="navTo()">
+                        浏览全部商品 <el-icon class="icon">
                             <DArrowRight />
                         </el-icon>
                     </button>
@@ -191,26 +137,37 @@ const goToProductList = () => {
 </template>
 
 <style scoped>
-/* --- 动画样式修改 --- */
+/* 仅保留核心修改的样式，其余保持不变 */
 
-/* 1. 基础状态：所有卡片都必须有过渡属性，否则消失时会很生硬 */
+/* 1. 动画类：合并了 transition 属性 */
 :global(.slide-in-item) {
     opacity: 0;
     transform: translateY(40px) scale(0.95);
-    /* 稍微缩小一点，增加呼吸感 */
     transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-    /* 这里把 transition 放在基础类上 
-       是为了保证“进入”和“离开”都有平滑动画
-    */
+    will-change: opacity, transform;
+    /* 性能优化 */
 }
 
-/* 2. 激活状态：回到原位 */
 :global(.slide-in-active) {
     opacity: 1;
     transform: translateY(0) scale(1);
 }
 
-/* --- 其他原有样式 --- */
+/* 2. 滑块优化：不再需要 hardcode 高度，依靠 JS 动态计算，这里只需基础样式 */
+.hover-slider {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background-color: #fff0f0;
+    z-index: 100;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    /* 添加 all 以支持 height 变化 */
+    pointer-events: none;
+    border-left: 3px solid var(--primary-color);
+}
+
+/* 原有的大部分布局样式不需要动，已省略... */
 .home-container {
     padding-top: 20px;
     padding-bottom: 60px;
@@ -271,20 +228,6 @@ const goToProductList = () => {
     padding: 10px 0;
     margin: 0;
     position: relative;
-}
-
-.hover-slider {
-    position: absolute;
-    left: 0;
-    top: 0;
-    box-sizing: border-box;
-    width: 100%;
-    height: 42px;
-    background-color: #fff0f0;
-    z-index: 100;
-    transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s;
-    pointer-events: none;
-    border-left: 3px solid var(--primary-color);
 }
 
 .cat-item {

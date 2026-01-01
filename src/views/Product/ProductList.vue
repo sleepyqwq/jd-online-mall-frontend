@@ -2,8 +2,8 @@
 import { ref, reactive, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getProductList } from '@/api/product'
-import { Top, Bottom } from '@element-plus/icons-vue' // 补上可能缺失的图标引入
-import ProductCard from '@/components/ProductCard.vue' // 引入组件
+import { Top, Bottom } from '@element-plus/icons-vue'
+import ProductCard from '@/components/ProductCard.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,7 +15,7 @@ const total = ref(0)
 // 筛选与排序参数
 const queryParams = reactive({
     pageNum: 1,
-    pageSize: 20,
+    pageSize: 10, // [修改] 默认显示数量改为 12
     keyword: route.query.keyword || '',
     categoryId: route.query.categoryId || '',
     sortField: '',
@@ -165,10 +165,7 @@ onMounted(() => {
     border-color: var(--el-color-primary);
 }
 
-/* 优化：使用 Grid 布局替代原来的 Flex 布局
-   minmax(220px, 1fr) 表示每列最小 220px，然后自动填满剩余空间，
-   这样在不同屏幕宽度下都能整齐排列。
-*/
+/* 优化：使用 Grid 布局替代原来的 Flex 布局 */
 .product-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

@@ -1,32 +1,38 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch } from 'vue' // 移除了 onMounted
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/userStore'
 import { useCartStore } from '@/stores/cartStore'
 import { logout } from '@/api/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-    Search,
-    ShoppingCart,
-    User,
-    List,
-    Delete
-} from '@element-plus/icons-vue'
+import { Search, ShoppingCart, User, List, Delete } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const cartStore = useCartStore()
+
+// --- 搜索逻辑 ---
 const keyword = ref('')
 const searchHistory = ref([])
-
-// --- 历史搜索逻辑 ---
 const HISTORY_KEY = 'jd_mall_search_history'
 
-const loadHistory = () => {
-    const json = localStorage.getItem(HISTORY_KEY)
-    if (json) {
-        searchHistory.value = JSON.parse(json)
-    }
+// 初始化加载历史
+const historyJson = localStorage.getItem(HISTORY_KEY)
+if (historyJson) searchHistory.value = JSON.parse(historyJson)
+
+const handleSearch = (val) => {
+    // 允许传入 val (点击历史标签时)，否则取输入框的值
+    const query = (typeof val === 'string' ? val : keyword.value).trim()
+    keyword.value = query // 同步输入框
+
+    if (!query) return router.push('/products')
+
+    // 使用 Set 去重并截取前5个
+    const newHistory = [query, ...searchHistory.value.filter(h => h !== query)].slice(0, 5)
+    searchHistory.value = newHistory
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
+
+    router.push({ path: '/products', query: { keyword: query } })
 }
 
 const clearHistory = () => {
@@ -34,171 +40,112 @@ const clearHistory = () => {
     localStorage.removeItem(HISTORY_KEY)
 }
 
-const handleHistoryClick = (tag) => {
-    keyword.value = tag
-    handleSearch()
-}
-
-const handleSearch = () => {
-    const val = keyword.value.trim()
-    if (!val) {
-        router.push('/products')
-        return
-    }
-    const newHistory = [val, ...searchHistory.value.filter(item => item !== val)].slice(0, 5)
-    searchHistory.value = newHistory
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
-    router.push({ path: '/products', query: { keyword: val } })
-}
-
 // --- 用户与购物车逻辑 ---
+// 简化 Computed
 const userAvatar = computed(() => userStore.userInfo?.avatar || '')
-const nickName = computed(() => {
-    if (!userStore.token) return '请登录'
-    return userStore.userInfo?.nickname || userStore.userInfo?.username || '用户'
-})
+const nickName = computed(() => userStore.token ? (userStore.userInfo?.nickname || userStore.userInfo?.username || '用户') : '请登录')
+
+// 统一处理鉴权点击
+const handleAuthAction = (action) => {
+    if (!userStore.token) return router.push('/login')
+    action && action()
+}
 
 const handleLogout = async () => {
     try {
-        await ElMessageBox.confirm('确定要退出登录吗？', '提示', { type: 'warning', center: true })
-        try { await logout() } catch (e) { }
-
+        await ElMessageBox.confirm('确定退出登录？', '提示', { type: 'warning', center: true })
+        await logout().catch(() => { }) // 忽略登出接口报错
         userStore.clearToken()
-        // 退出时清空购物车显示
-        cartStore.totalQuantity = 0
-        cartStore.cartList = []
-
+        // 状态重置交给 watch 自动处理
         ElMessage.success('已安全退出')
         router.push('/login')
     } catch (e) { }
 }
 
-const handleUserClick = () => {
-    if (!userStore.token) {
-        router.push('/login')
-    }
-}
-
-// 监听 Token，登录后拉取购物车
-watch(() => userStore.token, (newToken) => {
-    if (newToken) {
+// --- 核心优化：合并 onMounted 和 watch ---
+// immediate: true 确保组件加载时立即执行一次，替代 onMounted
+watch(() => userStore.token, (token) => {
+    if (token) {
         cartStore.fetchCart()
     } else {
         cartStore.totalQuantity = 0
+        cartStore.cartList = []
     }
-})
-
-onMounted(() => {
-    loadHistory()
-    if (userStore.token) {
-        cartStore.fetchCart()
-    }
-})
+}, { immediate: true })
 </script>
 
 <template>
     <header class="app-header">
-        <div class="top-bar">
-            <div class="container top-bar-inner">
-                <div class="left-entry">
-                    <span class="location-text">欢迎光临 JD Mall 商城</span>
-                </div>
-                <div class="right-entry">
-                    <template v-if="!userStore.token">
-                        <router-link to="/login" class="nav-link">登录</router-link>
-                        <span class="divider">|</span>
-                        <router-link to="/register" class="nav-link">免费注册</router-link>
-                    </template>
-                    <template v-else>
-                        <a href="javascript:;" class="nav-link">帮助中心</a>
-                        <span class="divider">|</span>
-                        <a href="javascript:;" class="nav-link">关于我们</a>
-                    </template>
+        <div class="container header-inner">
+            <div class="logo-wrapper" @click="router.push('/')">
+                <div class="logo-icon">JD</div>
+                <div class="logo-text">
+                    <span class="main-title">商城</span>
+                    <span class="sub-title">多快好省 · 品质保障</span>
                 </div>
             </div>
-        </div>
 
-        <div class="main-header">
-            <div class="container main-header-inner">
-
-                <div class="logo-wrapper" @click="router.push('/')">
-                    <div class="logo-icon">JD</div>
-                    <div class="logo-text">
-                        <span class="main-title">商城</span>
-                        <span class="sub-title">多快好省 · 品质保障</span>
-                    </div>
+            <div class="search-section">
+                <div class="search-box">
+                    <input v-model="keyword" class="search-input" placeholder="搜索商品..." @keyup.enter="handleSearch" />
+                    <button class="search-btn" @click="handleSearch">
+                        <el-icon>
+                            <Search />
+                        </el-icon>
+                    </button>
                 </div>
 
-                <div class="search-section">
-                    <div class="search-box-wrapper">
-                        <input v-model="keyword" type="text" class="search-input" placeholder="搜索你想要的商品..."
-                            @keyup.enter="handleSearch" />
-                        <button class="search-btn" @click="handleSearch">
-                            <el-icon>
-                                <Search />
-                            </el-icon>
-                        </button>
-                    </div>
-
-                    <div class="history-bar" v-if="searchHistory.length > 0">
-                        <span class="history-label">历史搜索：</span>
-                        <span v-for="tag in searchHistory" :key="tag" class="history-tag"
-                            @click="handleHistoryClick(tag)">
-                            {{ tag }}
-                        </span>
-                        <span class="clear-history" @click="clearHistory" title="清空历史">
-                            <el-icon>
-                                <Delete />
-                            </el-icon>
-                        </span>
-                    </div>
+                <div class="history-bar" v-if="searchHistory.length">
+                    <span>历史：</span>
+                    <span v-for="tag in searchHistory" :key="tag" class="tag" @click="handleSearch(tag)">
+                        {{ tag }}
+                    </span>
+                    <el-icon class="clear-btn" @click="clearHistory" title="清空">
+                        <Delete />
+                    </el-icon>
                 </div>
+            </div>
 
-                <div class="action-section">
-
-                    <div class="action-item user-action">
-                        <el-dropdown trigger="hover" :disabled="!userStore.token" class="no-outline">
-                            <div class="action-content" @click="handleUserClick">
-                                <el-avatar :size="36" :src="userAvatar" :icon="User" class="nav-avatar" />
-                                <div class="action-text">
-                                    <span class="small-label">你好,</span>
-                                    <span class="big-label">{{ nickName }}</span>
-                                </div>
+            <div class="action-section">
+                <div class="action-item user-action">
+                    <el-dropdown trigger="hover" :disabled="!userStore.token" class="custom-dropdown">
+                        <div class="action-content" @click="handleAuthAction(null)">
+                            <el-avatar :size="36" :src="userAvatar" :icon="User" class="avatar" />
+                            <div class="text-col">
+                                <span class="sub">你好,</span>
+                                <span class="main">{{ nickName }}</span>
                             </div>
-                            <template #dropdown>
-                                <el-dropdown-menu>
-                                    <el-dropdown-item @click="router.push('/address')">收货地址</el-dropdown-item>
-                                    <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
-                                </el-dropdown-menu>
-                            </template>
-                        </el-dropdown>
-                    </div>
+                        </div>
+                        <template #dropdown>
+                            <el-dropdown-menu>
+                                <el-dropdown-item @click="router.push('/address')">收货地址</el-dropdown-item>
+                                <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
+                            </el-dropdown-menu>
+                        </template>
+                    </el-dropdown>
+                </div>
 
-                    <div class="action-item" @click="router.push('/orders')">
-                        <div class="icon-box">
-                            <el-icon>
-                                <List />
-                            </el-icon>
-                        </div>
-                        <div class="action-text">
-                            <span class="small-label">交易管理</span>
-                            <span class="big-label">我的订单</span>
-                        </div>
+                <div class="action-item" @click="handleAuthAction(() => router.push('/orders'))">
+                    <el-icon :size="24">
+                        <List />
+                    </el-icon>
+                    <div class="text-col">
+                        <span class="sub">交易管理</span>
+                        <span class="main">我的订单</span>
                     </div>
+                </div>
 
-                    <div class="action-item cart-action" @click="router.push('/cart')">
-                        <div class="cart-icon-wrapper">
-                            <el-icon :size="28">
-                                <ShoppingCart />
-                            </el-icon>
-                            <span class="cart-badge">{{ cartStore.totalQuantity }}</span>
-                        </div>
-                        <div class="action-text">
-                            <span class="small-label">当前购入</span>
-                            <span class="big-label">购物车</span>
-                        </div>
+                <div class="action-item cart-item" @click="handleAuthAction(() => router.push('/cart'))">
+                    <div class="cart-icon">
+                        <el-icon :size="28">
+                            <ShoppingCart />
+                        </el-icon>
+                        <span class="badge">{{ cartStore.totalQuantity }}</span>
                     </div>
-
+                    <div class="text-col">
+                        <span class="sub">当前购入</span>
+                        <span class="main">购物车</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -206,66 +153,31 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* --- 基础样式 --- */
+/* 布局与通用 */
 .app-header {
-    font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
     background: #fff;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    padding: 20px 0;
     position: relative;
     z-index: 1000;
 }
 
-.top-bar {
-    background-color: #333;
-    color: #b0b0b0;
-    height: 32px;
-    font-size: 12px;
-    line-height: 32px;
-}
-
-.top-bar-inner {
-    display: flex;
-    justify-content: space-between;
-}
-
-.nav-link {
-    color: #b0b0b0;
-    text-decoration: none;
-    transition: color 0.2s;
-    cursor: pointer;
-}
-
-.nav-link:hover {
-    color: #fff;
-}
-
-.divider {
-    margin: 0 10px;
-    color: #555;
-}
-
-.main-header {
-    padding: 20px 0;
-}
-
-.main-header-inner {
+.header-inner {
     display: flex;
     align-items: center;
     justify-content: space-between;
     height: 60px;
 }
 
-/* --- Logo 区域 (包含您喜欢的动画) --- */
+/* Logo */
 .logo-wrapper {
     display: flex;
     align-items: center;
     cursor: pointer;
     margin-right: 40px;
-    /* 关键：添加平滑过渡动画 */
-    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);
+    transition: transform 0.2s;
 }
 
-/* 悬停时的缩放效果 */
 .logo-wrapper:hover {
     transform: scale(1.05);
 }
@@ -273,17 +185,14 @@ onMounted(() => {
 .logo-icon {
     width: 44px;
     height: 44px;
-    background: linear-gradient(135deg, #e4393c 0%, #ff6b6b 100%);
+    background: linear-gradient(135deg, #e4393c, #ff6b6b);
     color: #fff;
     font-size: 24px;
     font-weight: 900;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    display: grid;
+    place-items: center;
     border-radius: 8px;
     margin-right: 12px;
-    /* 给图标也加一点点阴影 */
-    box-shadow: 0 4px 12px rgba(228, 57, 60, 0.3);
 }
 
 .logo-text {
@@ -296,7 +205,6 @@ onMounted(() => {
     font-weight: bold;
     color: #333;
     line-height: 1;
-    margin-bottom: 2px;
 }
 
 .sub-title {
@@ -305,14 +213,14 @@ onMounted(() => {
     letter-spacing: 1px;
 }
 
-/* --- 搜索框区域 --- */
+/* 搜索框 */
 .search-section {
     flex: 1;
     max-width: 580px;
     margin-right: 40px;
 }
 
-.search-box-wrapper {
+.search-box {
     display: flex;
     height: 38px;
     border: 2px solid #e4393c;
@@ -321,7 +229,7 @@ onMounted(() => {
     transition: box-shadow 0.2s;
 }
 
-.search-box-wrapper:focus-within {
+.search-box:focus-within {
     box-shadow: 0 0 0 3px rgba(228, 57, 60, 0.1);
 }
 
@@ -329,7 +237,6 @@ onMounted(() => {
     flex: 1;
     border: none;
     padding: 0 20px;
-    font-size: 14px;
     outline: none;
 }
 
@@ -338,17 +245,18 @@ onMounted(() => {
     background: #e4393c;
     border: none;
     color: #fff;
-    font-size: 18px;
     cursor: pointer;
     display: flex;
     justify-content: center;
     align-items: center;
+    font-size: 18px;
 }
 
 .search-btn:hover {
     background: #d63033;
 }
 
+/* 历史记录 */
 .history-bar {
     margin-top: 6px;
     font-size: 12px;
@@ -356,42 +264,35 @@ onMounted(() => {
     padding-left: 10px;
     display: flex;
     align-items: center;
-    height: 20px;
 }
 
-.history-label {
-    margin-right: 5px;
-}
-
-.history-tag {
+.tag {
     background: #f4f4f4;
     padding: 0 6px;
     border-radius: 2px;
-    margin-right: 8px;
+    margin: 0 4px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: 0.2s;
     color: #666;
 }
 
-.history-tag:hover {
+.tag:hover {
     color: #e4393c;
     background: #fcebeb;
 }
 
-.clear-history {
+.clear-btn {
     margin-left: auto;
     cursor: pointer;
-    padding: 2px;
 }
 
-.clear-history:hover {
+.clear-btn:hover {
     color: #e4393c;
 }
 
-/* --- 右侧功能区 --- */
+/* 右侧操作区 */
 .action-section {
     display: flex;
-    align-items: center;
     gap: 20px;
 }
 
@@ -413,135 +314,102 @@ onMounted(() => {
     display: flex;
     align-items: center;
     outline: none;
-    /* 确保内容区本身无边框 */
 }
 
-/* 修改点2: 强制移除 el-dropdown 的聚焦边框 */
-.no-outline {
-    outline: none !important;
-}
-
-/* 使用 :deep 选择器穿透，移除 Element Plus 内部触发器的边框 */
-.no-outline :deep(.el-tooltip__trigger) {
-    outline: none !important;
-}
-
-.action-text {
+.text-col {
     display: flex;
     flex-direction: column;
     margin-left: 8px;
     justify-content: center;
 }
 
-.small-label {
+.sub {
     font-size: 12px;
     color: #999;
     line-height: 1.2;
 }
 
-.big-label {
+.main {
     font-size: 14px;
     font-weight: bold;
     color: #333;
     line-height: 1.2;
 }
 
-.nav-avatar {
+.avatar {
     background: #f2f2f2;
     border: 1px solid #eee;
 }
 
-.icon-box {
-    font-size: 24px;
-    color: #333;
-}
-
-.cart-icon-wrapper {
+/* 购物车图标 */
+.cart-icon {
     position: relative;
-    display: flex;
-    align-items: center;
     padding-right: 6px;
+    display: flex;
 }
 
-.cart-badge {
+.badge {
     position: absolute;
     top: -6px;
     right: -6px;
     background: #e4393c;
     color: #fff;
     font-size: 12px;
-    font-weight: normal;
+    padding: 0 4px;
+    border-radius: 10px;
     height: 16px;
     min-width: 16px;
-    line-height: 16px;
-    border-radius: 8px;
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 0 4px;
     border: 2px solid #fff;
-    box-sizing: content-box;
 }
 
-/* --- 动画关键帧定义 --- */
-
-/* 1. 购物车动画：模拟小车行进时的轻微晃动 */
-@keyframes cart-wobble {
-    0% {
-        transform: translateX(0) rotate(0);
-    }
-
-    25% {
-        transform: translateX(-2px) rotate(-6deg);
-    }
-
-    50% {
-        transform: translateX(2px) rotate(6deg);
-    }
-
-    75% {
-        transform: translateX(-1px) rotate(-3deg);
-    }
-
-    100% {
-        transform: translateX(0) rotate(0);
-    }
-}
-
-/* 2. 订单/清单动画：模拟纸张或图标轻微的Q弹放大 */
+/* 动画 */
 @keyframes list-pop {
-    0% {
-        transform: scale(1);
-    }
-
     50% {
         transform: scale(1.2);
     }
+}
 
-    100% {
-        transform: scale(1);
+@keyframes cart-wobble {
+    25% {
+        transform: rotate(-6deg);
+    }
+
+    50% {
+        transform: rotate(6deg);
+    }
+
+    75% {
+        transform: rotate(-3deg);
     }
 }
 
-/* --- 应用动画到具体图标 --- */
-
-/* 针对“我的订单”图标：鼠标悬停时，图标变红并Q弹一下 */
-.action-item:hover .icon-box .el-icon {
+.action-item:hover .el-icon {
     color: #e4393c;
-    /* 变京东红 */
-    animation: list-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation: list-pop 0.4s;
 }
 
-/* 针对“购物车”图标：鼠标悬停时，图标变红并晃动 */
-.cart-action:hover .cart-icon-wrapper .el-icon {
-    color: #e4393c;
-    /* 变京东红 */
-    animation: cart-wobble 0.5s ease-in-out;
+.cart-item:hover .el-icon {
+    animation: cart-wobble 0.5s;
 }
 
-/* 额外优化：为了让颜色变化更丝滑，建议给原图标类添加过渡属性 (可选) */
-.icon-box .el-icon,
-.cart-icon-wrapper .el-icon {
+.el-icon {
     transition: color 0.2s;
+}
+
+/* === 核心修复：未登录状态鼠标手型 === */
+.user-action :deep(.el-dropdown.is-disabled) {
+    cursor: pointer;
+}
+
+.user-action :deep(.el-dropdown.is-disabled .action-content) {
+    cursor: pointer;
+    color: inherit;
+}
+
+.custom-dropdown :deep(.el-tooltip__trigger) {
+    outline: none;
 }
 </style>

@@ -1,456 +1,304 @@
 <script setup>
-import { ref, reactive, onMounted, onActivated } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAdminOrderList, getAdminOrderDetail, updateAdminOrderStatus } from '@/api/admin'
 
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
-
-const query = reactive({
-  orderNo: '',
-  status: '',
-  userId: '',
-  pageNum: 1,
-  pageSize: 10,
-})
-
 const detailVisible = ref(false)
 const orderDetail = ref({})
 
-const statusDict = {
-  WAIT_PAY: '待支付',
-  PAID: '已支付',
-  SHIPPED: '已发货',
-  COMPLETED: '已完成',
-  CANCELED: '已取消',
+const query = reactive({ orderNo: '', status: '', userId: '', pageNum: 1, pageSize: 10 })
+
+// 统一状态配置 (文案、颜色、操作提示)
+const STATUS_MAP = {
+  WAIT_PAY: { label: '待支付', type: 'warning' },
+  PAID: { label: '已支付', type: 'success', action: 'SHIPPED', actionText: '发货', confirm: '确认标记为已发货？' },
+  SHIPPED: { label: '已发货', type: 'primary', action: 'COMPLETED', actionText: '完成', confirm: '确认标记为已完成？' },
+  COMPLETED: { label: '已完成', type: 'success' },
+  CANCELED: { label: '已取消', type: 'info' }
 }
 
-const statusTagType = {
-  WAIT_PAY: 'warning',
-  PAID: 'success',
-  SHIPPED: 'info',
-  COMPLETED: 'success',
-  CANCELED: 'danger',
-}
-
+// 加载列表
 const loadList = async () => {
   loading.value = true
   try {
     const res = await getAdminOrderList(query)
     list.value = res.list || []
     total.value = res.total || 0
-  } catch (error) {
-    console.error(error)
-  } finally {
-    loading.value = false
-  }
+  } catch (e) { console.error(e) }
+  finally { loading.value = false }
 }
 
-const handleSearch = () => {
+// 统一查询入口
+const handleSearch = (reset = false) => {
+  if (reset) Object.assign(query, { orderNo: '', status: '', userId: '' })
   query.pageNum = 1
   loadList()
 }
 
-const handleReset = () => {
-  query.orderNo = ''
-  query.status = ''
-  query.userId = ''
-  query.pageNum = 1
-  loadList()
-}
-
-const handlePageChange = (page) => {
-  query.pageNum = page
-  loadList()
-}
-
-const showDetail = async (orderId) => {
+// 详情查看
+const showDetail = async (id) => {
   try {
-    const res = await getAdminOrderDetail(orderId)
-    orderDetail.value = res || {}
+    orderDetail.value = (await getAdminOrderDetail(id)) || {}
     detailVisible.value = true
-  } catch (error) {
-    console.error(error)
-  }
+  } catch (e) { console.error(e) }
 }
 
-const handleUpdateStatus = (order, status, remark) => {
-  const tips = {
-    SHIPPED: '确认标记为已发货吗？',
-    COMPLETED: '确认标记为已完成吗？',
-    CANCELED: '确认关闭订单吗？',
-  }
-  ElMessageBox.confirm(tips[status] || '确认更新订单状态？', '提示', { type: 'warning' })
+// 状态更新
+const handleUpdateStatus = (order, targetStatus, tip) => {
+  ElMessageBox.confirm(tip, '提示', { type: 'warning' })
     .then(async () => {
-      await updateAdminOrderStatus(order.orderId, status, remark)
-      ElMessage.success('订单状态已更新')
+      await updateAdminOrderStatus(order.orderId, targetStatus)
+      ElMessage.success('操作成功')
       loadList()
-      if (detailVisible.value && orderDetail.value.orderId === order.orderId) {
-        showDetail(order.orderId)
-      }
-    })
-    .catch(() => { })
+      // 如果详情页开着，顺便刷新详情
+      if (detailVisible.value && orderDetail.value.orderId === order.orderId) showDetail(order.orderId)
+    }).catch(() => { })
 }
 
-onMounted(() => {
-  loadList()
-})
-
-onActivated(() => {
-  loadList()
-})
+onMounted(loadList)
 </script>
 
 <template>
   <div class="panel-card">
     <div class="panel-header">
-      <div>
-        <div class="panel-title">订单管理</div>
-        <div class="panel-subtitle">查看订单状态、明细，支持发货/完成/关闭</div>
+      <div class="header-left">
+        <div class="title">订单管理</div>
+        <div class="subtitle">订单全生命周期监控与处理</div>
       </div>
-      <el-button @click="loadList">刷新</el-button>
+      <el-button @click="loadList">刷新数据</el-button>
     </div>
 
-    <el-form inline class="filter-bar" label-width="90px">
+    <el-form inline class="filter-bar">
       <el-form-item label="订单号">
-        <el-input v-model="query.orderNo" placeholder="支持模糊搜索" clearable @keyup.enter="handleSearch" />
+        <el-input v-model="query.orderNo" placeholder="模糊搜索" clearable @keyup.enter="handleSearch()"
+          style="width: 180px" />
       </el-form-item>
       <el-form-item label="用户ID">
-        <el-input v-model="query.userId" placeholder="可选" clearable @keyup.enter="handleSearch" />
+        <el-input v-model="query.userId" placeholder="精准匹配" clearable @keyup.enter="handleSearch()"
+          style="width: 150px" />
       </el-form-item>
       <el-form-item label="状态">
-        <el-select v-model="query.status" placeholder="全部" clearable style="width: 160px">
-          <el-option label="待支付" value="WAIT_PAY" />
-          <el-option label="已支付" value="PAID" />
-          <el-option label="已发货" value="SHIPPED" />
-          <el-option label="已完成" value="COMPLETED" />
-          <el-option label="已取消" value="CANCELED" />
+        <el-select v-model="query.status" placeholder="全部状态" clearable style="width: 140px" @change="handleSearch()">
+          <el-option v-for="(cfg, key) in STATUS_MAP" :key="key" :label="cfg.label" :value="key" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleReset">重置</el-button>
+        <el-button type="primary" @click="handleSearch()">查询</el-button>
+        <el-button @click="handleSearch(true)">重置</el-button>
       </el-form-item>
     </el-form>
 
-    <el-table :data="list" v-loading="loading" border stripe>
-      <el-table-column label="订单号" min-width="160">
+    <el-table :data="list" v-loading="loading" class="custom-table">
+      <el-table-column label="订单号" min-width="180">
         <template #default="{ row }">
-          <el-link type="primary" @click="showDetail(row.orderId)">{{ row.orderNo }}</el-link>
+          <span class="link-text" @click="showDetail(row.orderId)">{{ row.orderNo }}</span>
         </template>
       </el-table-column>
       <el-table-column prop="userId" label="用户ID" width="120" />
-      <el-table-column label="状态" width="110" align="center">
+      <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
-          <el-tag :type="statusTagType[row.status] || 'info'">
-            {{ statusDict[row.status] || row.status }}
+          <el-tag :type="STATUS_MAP[row.status]?.type" size="small" effect="plain">
+            {{ STATUS_MAP[row.status]?.label || row.status }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="totalAmount" label="总金额(元)" width="120" />
-      <el-table-column prop="createTime" label="创建时间" min-width="160" />
-      <el-table-column prop="payTime" label="支付时间" min-width="160" />
-      <el-table-column label="操作" width="250" fixed="right">
+      <el-table-column prop="totalAmount" label="金额" width="120">
+        <template #default="{ row }">¥ {{ row.totalAmount }}</template>
+      </el-table-column>
+      <el-table-column prop="createTime" label="创建时间" min-width="170" />
+
+      <el-table-column label="操作" width="180" fixed="right" align="center">
         <template #default="{ row }">
-          <el-button text size="small" @click="showDetail(row.orderId)">详情</el-button>
-          <el-button v-if="row.status === 'PAID'" text type="primary" size="small"
-            @click="handleUpdateStatus(row, 'SHIPPED', '已发货')">
-            发货
+          <el-button link type="primary" size="small" @click="showDetail(row.orderId)">详情</el-button>
+
+          <el-button v-if="STATUS_MAP[row.status]?.action" link type="success" size="small"
+            @click="handleUpdateStatus(row, STATUS_MAP[row.status].action, STATUS_MAP[row.status].confirm)">
+            {{ STATUS_MAP[row.status].actionText }}
           </el-button>
-          <el-button v-if="row.status === 'SHIPPED'" text type="success" size="small"
-            @click="handleUpdateStatus(row, 'COMPLETED', '已收货')">
-            完成
-          </el-button>
-          <el-button v-if="row.status === 'WAIT_PAY' || row.status === 'PAID'" text type="danger" size="small"
-            @click="handleUpdateStatus(row, 'CANCELED', '后台关闭订单')">
+
+          <el-button v-if="['WAIT_PAY', 'PAID'].includes(row.status)" link type="danger" size="small"
+            @click="handleUpdateStatus(row, 'CANCELED', '确认强行关闭此订单？')">
             关闭
           </el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div class="pager" v-if="total > 0">
-      <el-pagination background layout="prev, pager, next" :total="Number(total)" :page-size="query.pageSize"
-        :current-page="query.pageNum" @current-change="handlePageChange" />
+    <div class="pager-wrapper">
+      <el-pagination background layout="total, prev, pager, next" :total="Number(total)" :page-size="query.pageSize"
+        v-model:current-page="query.pageNum" @current-change="loadList" />
     </div>
 
-    <el-drawer v-model="detailVisible" title="订单详情" size="60%">
-      <el-descriptions :column="2" border>
+    <el-drawer v-model="detailVisible" title="订单详情" size="600px">
+      <el-descriptions :column="2" border class="desc-box">
         <el-descriptions-item label="订单号">{{ orderDetail.orderNo }}</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="statusTagType[orderDetail.status] || 'info'">
-            {{ statusDict[orderDetail.status] || orderDetail.status }}
-          </el-tag>
-        </el-descriptions-item>
+        <el-descriptions-item label="状态">{{ STATUS_MAP[orderDetail.status]?.label }}</el-descriptions-item>
         <el-descriptions-item label="总金额">¥ {{ orderDetail.totalAmount }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ orderDetail.createTime }}</el-descriptions-item>
-        <el-descriptions-item label="支付时间">{{ orderDetail.payTime || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="取消时间">{{ orderDetail.cancelTime || '-' }}</el-descriptions-item>
-
-        <el-descriptions-item label="订单备注" :span="2">
-          {{ orderDetail.remark || '无' }}
-        </el-descriptions-item>
-
-        <el-descriptions-item label="取消原因" :span="2" v-if="orderDetail.cancelReason">
-          {{ orderDetail.cancelReason }}
-        </el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ orderDetail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
 
-      <div class="block-title">收货信息</div>
-      <div class="address-box" v-if="orderDetail.addressSnapshot">
-        <div>收货人：{{ orderDetail.addressSnapshot.receiverName }}</div>
-        <div>联系电话：{{ orderDetail.addressSnapshot.receiverPhone }}</div>
-        <div>地址：{{ orderDetail.addressSnapshot.province }} {{ orderDetail.addressSnapshot.city }} {{
-          orderDetail.addressSnapshot.district }}
-          {{ orderDetail.addressSnapshot.detailAddress }}</div>
+      <div class="section-title">收货信息</div>
+      <div class="info-block" v-if="orderDetail.addressSnapshot">
+        <p><strong>{{ orderDetail.addressSnapshot.receiverName }}</strong> ({{ orderDetail.addressSnapshot.receiverPhone
+        }})
+        </p>
+        <p class="sub-text">{{ orderDetail.addressSnapshot.province }} {{ orderDetail.addressSnapshot.city }} {{
+          orderDetail.addressSnapshot.detailAddress }}</p>
       </div>
-      <div v-else class="empty-tip">暂无收货信息</div>
 
-      <div class="block-title">商品清单</div>
-      <el-table :data="orderDetail.items || []" border size="small">
-        <el-table-column label="商品" min-width="200">
-          <template #default="{ row }">
-            <div class="goods-info">
-              <img :src="row.productImage" />
-              <div>
-                <div class="name">{{ row.productTitle }}</div>
-                <div class="meta">ID: {{ row.productId }}</div>
-              </div>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="price" label="单价" width="100" />
-        <el-table-column prop="quantity" label="数量" width="80" />
-        <el-table-column prop="subtotalAmount" label="小计" width="100" />
-      </el-table>
+      <div class="section-title">商品清单</div>
+      <div class="goods-list">
+        <div v-for="item in orderDetail.items" :key="item.id" class="goods-item">
+          <img :src="item.productImage" />
+          <div class="goods-detail">
+            <div class="g-name">{{ item.productTitle }}</div>
+            <div class="g-meta">¥{{ item.price }} x {{ item.quantity }}</div>
+          </div>
+          <div class="g-total">¥{{ item.subtotalAmount }}</div>
+        </div>
+      </div>
     </el-drawer>
   </div>
 </template>
 
 <style scoped>
+/* 核心容器：磨砂玻璃风格 */
 .panel-card {
-  background: #fff;
-  border-radius: 10px;
-  padding: 20px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
+/* 头部 */
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
-.panel-title {
-  font-size: 18px;
-  font-weight: 700;
+.title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1e293b;
 }
 
-.panel-subtitle {
-  color: #909399;
+.subtitle {
   font-size: 13px;
+  color: #64748b;
   margin-top: 4px;
 }
 
+/* 筛选与分页 */
 .filter-bar {
-  background: #f7f9fc;
-  padding: 12px 12px 4px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.pager {
-  margin-top: 16px;
-  text-align: right;
-}
-
-.block-title {
-  margin: 18px 0 8px;
-  font-weight: 600;
-}
-
-.address-box {
-  background: #f9f9f9;
-  padding: 12px;
-  border-radius: 6px;
-  border: 1px solid #eee;
-  line-height: 1.7;
-}
-
-.empty-tip {
-  color: #999;
-  padding: 10px 0;
-  font-size: 13px;
-}
-
-.goods-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.goods-info img {
-  width: 60px;
-  height: 60px;
-  object-fit: cover;
-  border: 1px solid #eee;
-}
-
-.goods-info .name {
-  font-weight: 600;
-}
-
-.goods-info .meta {
-  font-size: 12px;
-  color: #999;
-}
-
-/* 1. 卡片容器：半透明磨砂质感 */
-.panel-card {
-  /* 0.95 不透明度，既保证内容可读性，又有一点通透感 */
-  background: rgba(255, 255, 255, 0.92) !important;
-  backdrop-filter: blur(20px);
-  /* 磨砂效果 */
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 20px !important;
-  padding: 30px 35px !important;
-  /* 柔和的光晕阴影 */
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  transition: transform 0.3s ease;
-}
-
-/* 2. 头部标题 */
-.panel-title {
-  font-size: 24px !important;
-  font-weight: 800 !important;
-  /* 渐变文字 */
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: -0.5px;
-}
-
-.panel-subtitle {
-  color: #64748b !important;
-  font-size: 13px !important;
-  margin-top: 8px !important;
-}
-
-/* 3. 筛选栏 */
-.filter-bar {
-  background: rgba(248, 250, 252, 0.6) !important;
-  /* 更淡的背景 */
-  padding: 18px 24px 6px !important;
-  border-radius: 12px !important;
-  border: 1px solid rgba(226, 232, 240, 0.6) !important;
-}
-
-/* 4. Element Plus 表格美化 */
-:deep(.el-table) {
+  background: #f8fafc;
+  padding: 12px 16px 0;
   border-radius: 12px;
-  overflow: hidden;
-  /* 表格背景透明，透出卡片背景 */
-  background-color: transparent !important;
-  --el-table-tr-bg-color: transparent !important;
+  margin-bottom: 20px;
+  border: 1px solid #e2e8f0;
+}
+
+.pager-wrapper {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 表格优化 */
+.custom-table {
+  background: transparent !important;
+  --el-table-tr-bg-color: transparent;
 }
 
 :deep(.el-table th.el-table__cell) {
-  background-color: rgba(241, 245, 249, 0.5) !important;
-  /* 半透明表头 */
+  background: rgba(241, 245, 249, 0.6) !important;
   color: #475569;
-  font-weight: 700;
-  height: 50px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+  border-bottom: none;
 }
 
 :deep(.el-table td.el-table__cell) {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.03) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
 }
 
-:deep(.el-table--enable-row-hover .el-table__body tr:hover > td) {
-  background-color: rgba(241, 245, 249, 0.8) !important;
-}
-
-/* 5. 按钮美化 (重点修正) */
-
-/* 主要操作按钮 (新增商品等) */
-:deep(.el-button--primary) {
-  /* 更加时尚的蓝紫渐变 */
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+.link-text {
+  color: #3b82f6;
+  cursor: pointer;
   font-weight: 500;
-  padding: 10px 20px;
-  height: auto;
+}
+
+.link-text:hover {
+  text-decoration: underline;
+}
+
+/* 详情页样式 */
+.section-title {
+  font-weight: 700;
+  margin: 24px 0 12px;
+  border-left: 4px solid #3b82f6;
+  padding-left: 10px;
+  font-size: 15px;
+}
+
+.info-block {
+  background: #f8fafc;
+  padding: 12px;
   border-radius: 8px;
-  transition: all 0.3s;
+  line-height: 1.6;
+  font-size: 14px;
 }
 
-:deep(.el-button--primary:hover) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(118, 75, 162, 0.4);
-}
-
-/* 文本操作按钮 (表格内的编辑/删除) */
-/* 统一先给 text 按钮加一点内边距 */
-:deep(.el-button.is-text) {
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 13px;
-  transition: all 0.2s;
-}
-
-/* 编辑按钮 - 改为柔和的蓝色背景块 */
-:deep(.el-button--primary.is-text) {
-  background-color: rgba(58, 123, 213, 0.1);
-  color: #ffffff !important;
-}
-
-:deep(.el-button--primary.is-text:hover) {
-  background-color: rgba(58, 123, 213, 0.2);
-}
-
-/* 下架/上架按钮 - 橙色背景块 */
-:deep(.el-button--warning.is-text) {
-  background-color: rgba(245, 158, 11, 0.1);
-  color: #f59e0b !important;
-}
-
-:deep(.el-button--warning.is-text:hover) {
-  background-color: rgba(245, 158, 11, 0.2);
-}
-
-/* 删除按钮 - 红色背景块 */
-:deep(.el-button--danger.is-text) {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444 !important;
-}
-
-:deep(.el-button--danger.is-text:hover) {
-  background-color: rgba(239, 68, 68, 0.2);
-}
-
-/* 标签美化 */
-:deep(.el-tag) {
-  border-radius: 6px;
-  padding: 0 12px;
-  font-weight: 600;
-  border: none;
-  letter-spacing: 0.5px;
-}
-
-/* 上架状态 */
-:deep(.el-tag--success) {
-  background: rgba(16, 185, 129, 0.15);
-  color: #059669;
-}
-
-/* 下架状态 */
-:deep(.el-tag--info) {
-  background: rgba(148, 163, 184, 0.15);
+.sub-text {
   color: #64748b;
+  font-size: 13px;
+}
+
+/* 商品列表简洁版 */
+.goods-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px dashed #eee;
+}
+
+.goods-item img {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  border: 1px solid #eee;
+  margin-right: 12px;
+  object-fit: cover;
+}
+
+.goods-detail {
+  flex: 1;
+}
+
+.g-name {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.g-meta {
+  color: #999;
+  font-size: 12px;
+}
+
+.g-total {
+  font-weight: 600;
+  font-family: Arial;
+}
+
+/* 按钮微调 */
+:deep(.el-button--primary:not(.is-link)) {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border: none;
 }
 </style>
